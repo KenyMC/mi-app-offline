@@ -1,6 +1,6 @@
-// --- SERVICE WORKER (v6 - Final Robusta) ---
+// --- SERVICE WORKER (v7 - Final con Mapa Satelital) ---
 
-const CACHE_NAME = 'mi-app-offline-v6-mapas';
+const CACHE_NAME = 'mi-app-offline-v7-satelital';
 
 // Archivos esenciales para el shell de la aplicación.
 const APP_SHELL_URLS = [
@@ -10,19 +10,17 @@ const APP_SHELL_URLS = [
     './indexedDB.js',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-    'https://i.imgur.com/K1fE1zX.png', // Icono 192x192
-    'https://i.imgur.com/O7bB24v.png'  // Icono 512x512
+    'https://static.vecteezy.com/system/resources/previews/002/564/296/non_2x/location-pointer-water-drop-nature-liquid-blue-silhouette-style-icon-free-vector.jpg'
 ];
 
 // Evento 'install': Guarda el App Shell.
 self.addEventListener('install', event => {
-    console.log('Service Worker v6: Instalando...');
+    console.log('Service Worker v7: Instalando...');
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Cache v6 abierto. Guardando App Shell...');
+                console.log('Cache v7 abierto. Guardando App Shell...');
                 cache.addAll(APP_SHELL_URLS);
-                // Agregamos también las imágenes de los marcadores de Leaflet
                 return cache.addAll([
                     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
                     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
@@ -34,7 +32,7 @@ self.addEventListener('install', event => {
 
 // Evento 'activate': Limpia cachés antiguos.
 self.addEventListener('activate', event => {
-    console.log('Service Worker v6: Activando...');
+    console.log('Service Worker v7: Activando...');
     const cacheWhitelist = [CACHE_NAME];
     event.waitUntil(
         caches.keys().then(cacheNames => Promise.all(
@@ -48,15 +46,15 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Evento 'fetch': Aplica la estrategia de caché correcta según el recurso.
+// Evento 'fetch': Lógica de caché robusta.
 self.addEventListener('fetch', event => {
     // Ignoramos peticiones que no sean GET
     if (event.request.method !== 'GET') {
         return;
     }
 
-    // Estrategia para las teselas del mapa: Stale-While-Revalidate
-    if (event.request.url.includes('tile.openstreetmap.org')) {
+    // Estrategia para las teselas del mapa satelital (Stale-While-Revalidate)
+    if (event.request.url.includes('server.arcgisonline.com')) {
         event.respondWith(
             caches.open(CACHE_NAME).then(cache => {
                 return cache.match(event.request).then(cachedResponse => {
@@ -71,23 +69,26 @@ self.addEventListener('fetch', event => {
         return; // Termina aquí para las teselas
     }
 
-    // Estrategia para todo lo demás (App Shell): Network falling back to Cache, con fallback a index.html
+    // Estrategia para todo lo demás (App Shell): Cache First, con fallback a la red y a la página principal.
+    // ESTA ES LA SOLUCIÓN DEFINITIVA PARA EL REFRESH OFFLINE.
     event.respondWith(
-        fetch(event.request)
-            .catch(() => {
-                // Si la red falla, busca en el caché
-                return caches.match(event.request)
-                    .then(cachedResponse => {
-                        // Si está en el caché, lo devuelve
-                        if (cachedResponse) {
-                            return cachedResponse;
-                        }
-                        // Si no está en caché y es una navegación (actualizar), devuelve la página principal
+        caches.match(event.request)
+            .then(cachedResponse => {
+                // Si está en caché, lo devuelve.
+                if (cachedResponse) {
+                    return cachedResponse;
+                }
+                
+                // Si no está en caché, lo busca en la red.
+                return fetch(event.request)
+                    .catch(() => {
+                        // Si la red falla y es una petición de navegación (actualizar)...
                         if (event.request.mode === 'navigate') {
+                            // ...devuelve la página principal desde el caché.
                             console.log('Fallback de navegación: devolviendo index.html desde caché');
                             return caches.match('./index.html');
                         }
-                        // Si no es nada de lo anterior, la petición falla
+                        // Si no, la petición falla.
                         return null;
                     });
             })
