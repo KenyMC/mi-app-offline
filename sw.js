@@ -1,43 +1,44 @@
-// --- SERVICE WORKER ---
+// --- SERVICE WORKER (Versión Mejorada) ---
 // Este archivo es el corazón de la funcionalidad offline.
 
-// 1. Definimos un nombre y versión para nuestro caché
-const CACHE_NAME = 'mi-app-offline-v1';
+// 1. Definimos un nombre y versión para nuestro caché. Al cambiar la versión,
+// el Service Worker se actualizará y descargará los archivos de nuevo.
+const CACHE_NAME = 'mi-app-offline-v2';
 
-// 2. Listamos los archivos que queremos guardar en el caché
-// Es importante incluir todos los archivos necesarios para que la app funcione.
+// 2. Listamos los archivos que queremos guardar en el caché.
+// Usamos rutas relativas para que funcione en cualquier servidor.
 const URLS_TO_CACHE = [
-    '/', // La ruta raíz de la app
-    'index.html', // El archivo HTML principal
-    'manifest.json', // El manifiesto de la app
-    'https://cdn.tailwindcss.com' // El CSS que usamos desde un CDN
+    './', // La ruta raíz relativa (la página principal)
+    './index.html',
+    './manifest.json',
+    'https://cdn.tailwindcss.com'
 ];
 
-// 3. Evento 'install': Se dispara cuando el Service Worker se instala por primera vez.
+// 3. Evento 'install': Se dispara cuando el Service Worker se instala.
 self.addEventListener('install', event => {
-    console.log('Service Worker: Instalando...');
+    console.log('Service Worker v2: Instalando...');
     // Esperamos hasta que el caché se abra y todos nuestros archivos se guarden
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Cache abierto. Guardando archivos...');
+                console.log('Cache v2 abierto. Guardando archivos...');
                 return cache.addAll(URLS_TO_CACHE);
             })
             .then(() => {
-                console.log('¡Archivos guardados en caché con éxito!');
-                // Forzar al nuevo Service Worker a activarse inmediatamente
+                console.log('¡Archivos v2 guardados en caché con éxito!');
+                // Forzamos al nuevo Service Worker a activarse inmediatamente
                 return self.skipWaiting();
             })
             .catch(err => {
-                console.error('Falló el guardado en caché:', err);
+                console.error('Falló el guardado en caché v2:', err);
             })
     );
 });
 
 // 4. Evento 'activate': Se dispara cuando el Service Worker se activa.
-// Es un buen lugar para limpiar cachés antiguos si hemos creado una nueva versión.
+// Es el lugar ideal para limpiar cachés antiguos.
 self.addEventListener('activate', event => {
-    console.log('Service Worker: Activando...');
+    console.log('Service Worker v2: Activando...');
     const cacheWhitelist = [CACHE_NAME]; // Lista de cachés que queremos mantener
 
     event.waitUntil(
@@ -58,29 +59,33 @@ self.addEventListener('activate', event => {
     );
 });
 
-// 5. Evento 'fetch': Se dispara cada vez que la página pide un recurso (un archivo, una imagen, etc.).
+// 5. Evento 'fetch': Se dispara cada vez que la página pide un recurso.
 self.addEventListener('fetch', event => {
-    console.log('Service Worker: Interceptando fetch para', event.request.url);
-    
-    // Estrategia "Cache First":
-    // Primero intentamos responder con el recurso desde el caché.
-    // Si no está en el caché, lo pedimos a la red.
+    // Solo nos interesan las peticiones GET
+    if (event.request.method !== 'GET') {
+        return;
+    }
+
+    // Estrategia "Cache First" con fallback inteligente para navegación
     event.respondWith(
         caches.match(event.request)
-            .then(response => {
-                if (response) {
-                    // ¡Encontrado en el caché! Lo devolvemos.
-                    console.log('Respondiendo desde el caché:', event.request.url);
-                    return response;
+            .then(cachedResponse => {
+                // Si la respuesta está en el caché, la devolvemos inmediatamente.
+                if (cachedResponse) {
+                    console.log('Respondiendo desde caché:', event.request.url);
+                    return cachedResponse;
                 }
-                // No está en el caché, lo pedimos a la red.
-                console.log('No está en caché. Pidiendo a la red:', event.request.url);
-                return fetch(event.request);
-            })
-            .catch(error => {
-                // Esto puede pasar si tanto el caché como la red fallan.
-                console.error('Error en el fetch:', error);
-                // Podrías devolver una página de fallback offline aquí.
+
+                // Si no está en caché, la pedimos a la red.
+                return fetch(event.request).catch(() => {
+                    // Si la petición a la red falla (estamos offline),
+                    // y es una petición de navegación (el usuario refresca o va a una página),
+                    // devolvemos el index.html cacheado como página de fallback.
+                    if (event.request.mode === 'navigate') {
+                        console.log('Fallback de navegación: devolviendo index.html desde caché');
+                        return caches.match('./index.html');
+                    }
+                });
             })
     );
 });
