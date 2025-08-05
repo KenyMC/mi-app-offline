@@ -8,89 +8,74 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     
-    <!-- Leaflet CSS - Necesario para que el mapa se vea bien -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
     <style>
-        /* Asegura que el mapa ocupe un espacio definido */
         #map { height: 60vh; width: 100%; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        body { touch-action: none; } /* Evita zoom del navegador al tocar dos veces */
+        body { touch-action: none; }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen">
 
     <main class="flex-grow flex flex-col p-4 space-y-4">
-        <!-- Consejo para el usuario -->
         <div class="text-xs text-center text-gray-500 dark:text-gray-400 p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
             <b>Tip:</b> Para usar el mapa sin conexión, navega por tu zona de interés (y haz zoom) mientras tengas internet. La app guardará esa área.
         </div>
 
-        <!-- Contenedor del Mapa -->
         <div id="map" class="bg-gray-300"></div>
 
-        <!-- Panel de Control -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-center">
             <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95">
                 Agregar Mi Ubicación Actual
             </button>
         </div>
 
-        <!-- Lista de Puntos Guardados -->
         <div class="flex-grow bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 overflow-y-auto">
             <h2 class="text-xl font-bold mb-2 text-center">Puntos Guardados Offline</h2>
             <ul id="points-list" class="space-y-2">
-                <!-- Los puntos se agregarán aquí dinámicamente -->
                 <li id="no-points-msg" class="text-gray-500 text-center">Aún no has guardado ningún punto.</li>
             </ul>
         </div>
     </main>
 
-    <!-- Leaflet JS - La librería para el mapa -->
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- IndexedDB Helper - Nuestro ayudante para la base de datos -->
+    <!-- IndexedDB Helper -->
     <script src="indexedDB.js"></script>
 
     <script>
-        // --- LÓGICA PRINCIPAL DE LA APLICACIÓN ---
-
         document.addEventListener('DOMContentLoaded', async () => {
-            // 1. Inicializar el Service Worker
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').then(reg => console.log('Service Worker registrado', reg)).catch(err => console.error('Error al registrar Service Worker', err));
+                navigator.serviceWorker.register('/sw.js').then(reg => console.log('Service Worker registrado', reg)).catch(err => console.error('Error al registrar SW', err));
             }
 
-            // 2. Inicializar la base de datos local
             await initDB();
 
-            // 3. Configurar el mapa Leaflet
-            // Centrado por defecto en Cusco, Perú. ¡Puedes cambiar estas coordenadas!
             const map = L.map('map').setView([-13.5226, -71.9673], 13);
 
-            // Cargar las "teselas" del mapa desde OpenStreetMap
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 19 // Aumentamos el zoom máximo permitido
+            // --- CAMBIO A MAPA SATELITAL ---
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
             }).addTo(map);
 
-            // Función para agregar un marcador al mapa
             function addMarkerToMap(lat, lon, id) {
                 L.marker([lat, lon]).addTo(map)
                     .bindPopup(`Punto guardado #${id}<br>Lat: ${lat.toFixed(4)}<br>Lon: ${lon.toFixed(4)}`);
             }
 
-            // Función para renderizar la lista de puntos
             const pointsList = document.getElementById('points-list');
             const noPointsMsg = document.getElementById('no-points-msg');
             
             async function renderPoints() {
-                pointsList.innerHTML = ''; // Limpiar lista
+                pointsList.innerHTML = '';
                 const points = await getPoints();
+                const markersLayer = L.layerGroup().addTo(map); // Capa para limpiar marcadores
+                
                 if (points.length > 0) {
                     if(noPointsMsg) noPointsMsg.style.display = 'none';
                     points.forEach(point => {
-                        // Agregar punto al mapa
                         addMarkerToMap(point.lat, point.lon, point.id);
-                        // Agregar punto a la lista
                         const li = document.createElement('li');
                         li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded';
                         li.textContent = `Punto #${point.id}: (Lat: ${point.lat.toFixed(4)}, Lon: ${point.lon.toFixed(4)})`;
@@ -104,7 +89,6 @@
                 }
             }
 
-            // 4. Configurar el botón para agregar ubicación
             const addMarkerBtn = document.getElementById('add-marker-btn');
             addMarkerBtn.addEventListener('click', () => {
                 addMarkerBtn.textContent = 'Obteniendo ubicación...';
@@ -113,14 +97,9 @@
                 navigator.geolocation.getCurrentPosition(
                     async (position) => {
                         const { latitude, longitude } = position.coords;
-                        
-                        // Guardar el punto en la base de datos local
                         await savePoint({ lat: latitude, lon: longitude });
-                        
-                        // Actualizar la UI
                         await renderPoints();
-                        map.setView([latitude, longitude], 18); // Centrar mapa en la nueva ubicación con más zoom
-                        
+                        map.setView([latitude, longitude], 18);
                         addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
                         addMarkerBtn.disabled = false;
                     },
@@ -130,11 +109,10 @@
                         addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
                         addMarkerBtn.disabled = false;
                     },
-                    { enableHighAccuracy: true } // Pide la máxima precisión posible del GPS
+                    { enableHighAccuracy: true }
                 );
             });
 
-            // 5. Cargar los puntos guardados al iniciar la app
             await renderPoints();
         });
     </script>
