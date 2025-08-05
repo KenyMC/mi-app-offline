@@ -1,79 +1,75 @@
-// --- SERVICE WORKER (Versión Final y Robusta) ---
+// --- SERVICE WORKER (v4 - con Cache de Mapas) ---
 
-const CACHE_NAME = 'mi-app-offline-v3';
+const CACHE_NAME = 'mi-app-offline-v4-mapas';
 
 // Archivos esenciales para el shell de la aplicación.
 const APP_SHELL_URLS = [
     './',
     './index.html',
-    './manifest.json'
+    './manifest.json',
+    './indexedDB.js', // ¡Importante añadir nuestro nuevo archivo!
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-// 3. Evento 'install': Se dispara cuando el Service Worker se instala.
+// Evento 'install': Guarda el App Shell.
 self.addEventListener('install', event => {
-    console.log('Service Worker v3: Instalando...');
+    console.log('Service Worker v4: Instalando...');
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Cache v3 abierto. Guardando App Shell...');
-                // Guardamos el App Shell. No incluimos el CDN aquí para mayor flexibilidad.
-                return cache.addAll(APP_SHELL_URLS);
+                console.log('Cache v4 abierto. Guardando App Shell...');
+                // Agregamos también las imágenes de los marcadores de Leaflet
+                cache.addAll(APP_SHELL_URLS);
+                return cache.addAll([
+                    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
+                ]);
             })
-            .then(() => {
-                console.log('¡App Shell v3 guardado en caché con éxito!');
-                return self.skipWaiting(); // Forzar activación inmediata
-            })
+            .then(() => self.skipWaiting())
     );
 });
 
-// 4. Evento 'activate': Se dispara cuando el Service Worker se activa.
+// Evento 'activate': Limpia cachés antiguos.
 self.addEventListener('activate', event => {
-    console.log('Service Worker v3: Activando...');
-    const cacheWhitelist = [CACHE_NAME]; // Lista de cachés que queremos mantener
-
+    console.log('Service Worker v4: Activando...');
+    const cacheWhitelist = [CACHE_NAME];
     event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.map(cacheName => {
-                    if (cacheWhitelist.indexOf(cacheName) === -1) {
-                        console.log('Borrando caché antiguo:', cacheName);
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        }).then(() => self.clients.claim()) // Tomar control inmediato de los clientes
+        caches.keys().then(cacheNames => Promise.all(
+            cacheNames.map(cacheName => {
+                if (cacheWhitelist.indexOf(cacheName) === -1) {
+                    return caches.delete(cacheName);
+                }
+            })
+        )).then(() => self.clients.claim())
     );
 });
 
-// 5. Evento 'fetch': Estrategia "Network falling back to cache"
+// Evento 'fetch': Estrategia "Stale-While-Revalidate" para mapas, y "Cache First" para lo demás.
 self.addEventListener('fetch', event => {
-    // Solo nos interesan las peticiones GET
-    if (event.request.method !== 'GET') {
-        return;
-    }
-
-    event.respondWith(
-        // Intentamos obtener el recurso de la red primero
-        fetch(event.request)
-            .then(networkResponse => {
-                // Si tenemos éxito, lo guardamos en el caché para futuras peticiones offline
-                return caches.open(CACHE_NAME).then(cache => {
-                    // Solo cacheamos respuestas válidas (ej. status 200 OK)
-                    if (event.request.url.startsWith('http')) {
-                       cache.put(event.request, networkResponse.clone());
-                    }
-                    return networkResponse;
+    // Si la URL es de una tesela de OpenStreetMap...
+    if (event.request.url.includes('tile.openstreetmap.org')) {
+        // Usamos una estrategia "Stale-While-Revalidate":
+        // 1. Respondemos rápido con el caché si existe.
+        // 2. Mientras tanto, pedimos una versión nueva a la red y actualizamos el caché.
+        event.respondWith(
+            caches.open(CACHE_NAME).then(cache => {
+                return cache.match(event.request).then(cachedResponse => {
+                    const fetchPromise = fetch(event.request).then(networkResponse => {
+                        cache.put(event.request, networkResponse.clone());
+                        return networkResponse;
+                    });
+                    return cachedResponse || fetchPromise;
                 });
             })
-            .catch(() => {
-                // Si la petición a la red falla (estamos offline), buscamos en el caché
-                console.log('Fetch falló. Buscando en caché:', event.request.url);
-                return caches.match(event.request)
-                    .then(cachedResponse => {
-                        // Si encontramos una respuesta en caché, la devolvemos
-                        // Si no, la petición falla (lo cual es esperado para recursos no cacheados)
-                        return cachedResponse || Promise.reject('resource-not-found');
-                    });
-            })
-    );
+        );
+    } else {
+        // Para todos los demás recursos, usamos "Cache falling back to Network"
+        event.respondWith(
+            caches.match(event.request)
+                .then(response => {
+                    return response || fetch(event.request);
+                })
+        );
+    }
 });
