@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>App de Mapa Offline</title>
+    <title>App Georreferenciacion SAP - PVCACH</title>
     <meta name="theme-color" content="#4A90E2">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
@@ -20,6 +20,11 @@
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen">
 
     <main class="flex-grow flex flex-col p-4 space-y-4">
+        <!-- Consejo para el usuario -->
+        <div class="text-xs text-center text-gray-500 dark:text-gray-400 p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+            <b>Tip:</b> Para usar el mapa sin conexión, navega por tu zona de interés (y haz zoom) mientras tengas internet. La app guardará esa área.
+        </div>
+
         <!-- Contenedor del Mapa -->
         <div id="map" class="bg-gray-300"></div>
 
@@ -63,14 +68,14 @@
 
             // Cargar las "teselas" del mapa desde OpenStreetMap
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19 // Aumentamos el zoom máximo permitido
             }).addTo(map);
 
             // Función para agregar un marcador al mapa
             function addMarkerToMap(lat, lon, id) {
                 L.marker([lat, lon]).addTo(map)
-                    .bindPopup(`Punto guardado #${id}<br>Lat: ${lat.toFixed(4)}<br>Lon: ${lon.toFixed(4)}`)
-                    .openPopup();
+                    .bindPopup(`Punto guardado #${id}<br>Lat: ${lat.toFixed(4)}<br>Lon: ${lon.toFixed(4)}`);
             }
 
             // Función para renderizar la lista de puntos
@@ -81,7 +86,7 @@
                 pointsList.innerHTML = ''; // Limpiar lista
                 const points = await getPoints();
                 if (points.length > 0) {
-                    noPointsMsg.style.display = 'none';
+                    if(noPointsMsg) noPointsMsg.style.display = 'none';
                     points.forEach(point => {
                         // Agregar punto al mapa
                         addMarkerToMap(point.lat, point.lon, point.id);
@@ -92,8 +97,10 @@
                         pointsList.appendChild(li);
                     });
                 } else {
-                     pointsList.appendChild(noPointsMsg);
-                     noPointsMsg.style.display = 'block';
+                     if(noPointsMsg) {
+                        pointsList.appendChild(noPointsMsg);
+                        noPointsMsg.style.display = 'block';
+                     }
                 }
             }
 
@@ -112,7 +119,7 @@
                         
                         // Actualizar la UI
                         await renderPoints();
-                        map.setView([latitude, longitude], 15); // Centrar mapa en la nueva ubicación
+                        map.setView([latitude, longitude], 18); // Centrar mapa en la nueva ubicación con más zoom
                         
                         addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
                         addMarkerBtn.disabled = false;
