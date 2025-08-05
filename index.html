@@ -2,103 +2,134 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- Título y tema de la aplicación -->
-    <title>App Offline</title>
-    <meta name="theme-color" content="#317EFB">
-
-    <!-- Carga de Tailwind CSS para un diseño moderno -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>App de Mapa Offline</title>
+    <meta name="theme-color" content="#4A90E2">
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Enlace al Manifest que define la PWA -->
     <link rel="manifest" href="manifest.json">
+    
+    <!-- Leaflet CSS - Necesario para que el mapa se vea bien -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
     <style>
-        /* Pequeño estilo para el indicador de estado */
-        #status-indicator {
-            transition: all 0.5s ease-in-out;
-        }
+        /* Asegura que el mapa ocupe un espacio definido */
+        #map { height: 60vh; width: 100%; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { touch-action: none; } /* Evita zoom del navegador al tocar dos veces */
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen">
 
-    <div class="container mx-auto mt-10 p-5 max-w-2xl text-center">
-        
-        <header class="mb-8">
-            <h1 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-blue-400">Mi Aplicación Offline</h1>
-            <p class="text-lg text-gray-600 dark:text-gray-300 mt-2">Esta aplicación funciona incluso sin conexión a internet.</p>
-        </header>
+    <main class="flex-grow flex flex-col p-4 space-y-4">
+        <!-- Contenedor del Mapa -->
+        <div id="map" class="bg-gray-300"></div>
 
-        <main class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
-            <div id="status-indicator" class="p-4 mb-6 rounded-lg text-white font-semibold flex items-center justify-center space-x-2">
-                <span id="status-icon"></span>
-                <span id="status-text"></span>
-            </div>
-            
-            <p class="mb-4">
-                ¡Bienvenido! La primera vez que visitas esta página con conexión, se guardará en tu dispositivo.
-            </p>
-            <p>
-                Para probarla, desconecta tu internet (o detén el servidor local) y recarga la página. ¡Verás que sigue funcionando!
-            </p>
-        </main>
+        <!-- Panel de Control -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-center">
+            <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95">
+                Agregar Mi Ubicación Actual
+            </button>
+        </div>
 
-        <footer class="mt-8 text-sm text-gray-500">
-            <p>Puedes "Instalar" esta aplicación en tu escritorio o pantalla de inicio desde el menú del navegador.</p>
-        </footer>
+        <!-- Lista de Puntos Guardados -->
+        <div class="flex-grow bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 overflow-y-auto">
+            <h2 class="text-xl font-bold mb-2 text-center">Puntos Guardados Offline</h2>
+            <ul id="points-list" class="space-y-2">
+                <!-- Los puntos se agregarán aquí dinámicamente -->
+                <li id="no-points-msg" class="text-gray-500 text-center">Aún no has guardado ningún punto.</li>
+            </ul>
+        </div>
+    </main>
 
-    </div>
+    <!-- Leaflet JS - La librería para el mapa -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- IndexedDB Helper - Nuestro ayudante para la base de datos -->
+    <script src="indexedDB.js"></script>
 
     <script>
-        // --- SCRIPT PRINCIPAL DE LA APP ---
+        // --- LÓGICA PRINCIPAL DE LA APLICACIÓN ---
 
-        // 1. Registrar el Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('Service Worker registrado con éxito:', registration);
-                    })
-                    .catch(error => {
-                        console.log('Fallo en el registro del Service Worker:', error);
-                    });
-            });
-        }
-
-        // 2. Lógica para actualizar el indicador de estado (online/offline)
-        const statusIndicator = document.getElementById('status-indicator');
-        const statusText = document.getElementById('status-text');
-        const statusIcon = document.getElementById('status-icon');
-
-        function updateOnlineStatus() {
-            const isOnline = navigator.onLine;
-            
-            statusText.textContent = isOnline ? 'Estás Conectado' : 'Estás Desconectado';
-            
-            if (isOnline) {
-                statusIndicator.classList.remove('bg-red-500');
-                statusIndicator.classList.add('bg-green-500');
-                statusIcon.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.394 9.393a15 15 0 0121.212 0" />
-                    </svg>
-                `;
-            } else {
-                statusIndicator.classList.remove('bg-green-500');
-                statusIndicator.classList.add('bg-red-500');
-                statusIcon.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m-12.728-12.728a9 9 0 0112.728 0M12 18.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-                    </svg>
-                `;
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 1. Inicializar el Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').then(reg => console.log('Service Worker registrado', reg)).catch(err => console.error('Error al registrar Service Worker', err));
             }
-        }
 
-        // Actualizar el estado al cargar la página y cuando cambie la conexión
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        updateOnlineStatus();
+            // 2. Inicializar la base de datos local
+            await initDB();
+
+            // 3. Configurar el mapa Leaflet
+            // Centrado por defecto en Cusco, Perú. ¡Puedes cambiar estas coordenadas!
+            const map = L.map('map').setView([-13.5226, -71.9673], 13);
+
+            // Cargar las "teselas" del mapa desde OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Función para agregar un marcador al mapa
+            function addMarkerToMap(lat, lon, id) {
+                L.marker([lat, lon]).addTo(map)
+                    .bindPopup(`Punto guardado #${id}<br>Lat: ${lat.toFixed(4)}<br>Lon: ${lon.toFixed(4)}`)
+                    .openPopup();
+            }
+
+            // Función para renderizar la lista de puntos
+            const pointsList = document.getElementById('points-list');
+            const noPointsMsg = document.getElementById('no-points-msg');
+            
+            async function renderPoints() {
+                pointsList.innerHTML = ''; // Limpiar lista
+                const points = await getPoints();
+                if (points.length > 0) {
+                    noPointsMsg.style.display = 'none';
+                    points.forEach(point => {
+                        // Agregar punto al mapa
+                        addMarkerToMap(point.lat, point.lon, point.id);
+                        // Agregar punto a la lista
+                        const li = document.createElement('li');
+                        li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded';
+                        li.textContent = `Punto #${point.id}: (Lat: ${point.lat.toFixed(4)}, Lon: ${point.lon.toFixed(4)})`;
+                        pointsList.appendChild(li);
+                    });
+                } else {
+                     pointsList.appendChild(noPointsMsg);
+                     noPointsMsg.style.display = 'block';
+                }
+            }
+
+            // 4. Configurar el botón para agregar ubicación
+            const addMarkerBtn = document.getElementById('add-marker-btn');
+            addMarkerBtn.addEventListener('click', () => {
+                addMarkerBtn.textContent = 'Obteniendo ubicación...';
+                addMarkerBtn.disabled = true;
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        
+                        // Guardar el punto en la base de datos local
+                        await savePoint({ lat: latitude, lon: longitude });
+                        
+                        // Actualizar la UI
+                        await renderPoints();
+                        map.setView([latitude, longitude], 15); // Centrar mapa en la nueva ubicación
+                        
+                        addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
+                        addMarkerBtn.disabled = false;
+                    },
+                    (error) => {
+                        console.error('Error al obtener la ubicación', error);
+                        alert(`Error al obtener ubicación: ${error.message}`);
+                        addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
+                        addMarkerBtn.disabled = false;
+                    },
+                    { enableHighAccuracy: true } // Pide la máxima precisión posible del GPS
+                );
+            });
+
+            // 5. Cargar los puntos guardados al iniciar la app
+            await renderPoints();
+        });
     </script>
 </body>
 </html>
