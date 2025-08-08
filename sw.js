@@ -1,10 +1,9 @@
-// --- SERVICE WORKER (v9 - Solución Offline Completa) ---
+// --- SERVICE WORKER (v10 - Solución Offline Definitiva) ---
 
 // Se incrementa la versión para forzar la actualización del Service Worker
-const CACHE_NAME = 'mi-app-offline-v9-full';
+const CACHE_NAME = 'mi-app-offline-v10-final';
 
 // Archivos esenciales para el shell de la aplicación.
-// AHORA INCLUYE TAILWIND CSS PARA QUE LA INTERFAZ CARGUE OFFLINE.
 const APP_SHELL_URLS = [
     './',
     './index.html',
@@ -16,7 +15,7 @@ const APP_SHELL_URLS = [
     // --- LIBRERÍAS AÑADIDAS AL CACHÉ PARA FUNCIONAR OFFLINE ---
     'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js',
-    'https://cdn.tailwindcss.com', // <-- ¡LA CORRECCIÓN CLAVE!
+    'https://cdn.tailwindcss.com', // <-- Archivo de estilos principal
     // --- Imágenes de Leaflet que también deben estar en caché ---
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
@@ -77,11 +76,9 @@ self.addEventListener('fetch', event => {
     event.respondWith(
         caches.match(event.request)
             .then(cachedResponse => {
-                // Si está en caché, lo devuelve.
                 if (cachedResponse) {
                     return cachedResponse;
                 }
-                // Si no, lo busca en la red.
                 return fetch(event.request).catch(() => {
                     if (event.request.mode === 'navigate') {
                         return caches.match('./index.html');
