@@ -13,7 +13,6 @@
 
     <style>
         /* Estilos generales y del mapa */
-        /* CORRECCIÓN: Se cambió height de 100vh a 100% para que el mapa ocupe el contenedor 'main' */
         #map { height: 100%; width: 100%; }
         body { touch-action: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
         
@@ -49,6 +48,11 @@
         .leaflet-popup-content .save-button:hover { background-color: #1d4ed8; }
         .leaflet-popup-content .delete-button { background-color: #dc2626; }
         .leaflet-popup-content .delete-button:hover { background-color: #b91c1c; }
+
+        /* Estilo para la notificación */
+        #notification.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900">
@@ -62,6 +66,11 @@
             <button id="create-connection-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition-transform transform active:scale-95">
                 Crear Conexión
             </button>
+        </div>
+        
+        <!-- Elemento para notificaciones -->
+        <div id="notification" class="absolute top-4 right-4 z-[2000] bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none">
+            Mensaje
         </div>
 
         <!-- Contenedor del mapa -->
@@ -100,36 +109,31 @@
             // Variables de estado de la aplicación
             let isConnecting = false;
             let originPoint = null;
-            const markers = new Map(); // Para mantener una referencia a los marcadores de Leaflet por ID
+            const markers = new Map();
 
             // --- FUNCIÓN DE RENDERIZADO PRINCIPAL ---
-            // Esta función se encarga de dibujar todo en el mapa y en la lista
             async function renderAll() {
-                // Limpiar capas existentes en el mapa (marcadores y líneas)
                 map.eachLayer(layer => {
                     if (layer instanceof L.Marker || layer instanceof L.Polyline) {
                         map.removeLayer(layer);
                     }
                 });
-                markers.clear(); // Limpiar el mapa de referencias a marcadores
+                markers.clear();
 
-                // Limpiar la lista de elementos en el panel inferior
                 const pointsList = document.getElementById('points-list');
                 const noPointsMsg = document.getElementById('no-points-msg');
                 pointsList.innerHTML = '';
                 pointsList.appendChild(noPointsMsg);
                 
-                // Cargar y dibujar los puntos (marcadores) desde la DB
                 const points = await getPoints();
                 if (points.length > 0) noPointsMsg.style.display = 'none';
                 else noPointsMsg.style.display = 'block';
 
                 points.forEach(point => {
-                    addMarkerToMap(point, false); // Añadir sin animación al cargar
+                    addMarkerToMap(point, false);
                     addPointToList(point);
                 });
 
-                // Cargar y dibujar las conexiones (líneas) desde la DB
                 const connections = await getConnections();
                 connections.forEach(conn => {
                     const origin = points.find(p => p.id === conn.originId);
@@ -144,36 +148,62 @@
                 });
             }
 
-            // --- MANEJO DE MARCADORES ---
+            // --- MANEJO DE MARCADORES Y POPUPS ---
             function addMarkerToMap(point, animate) {
                 const marker = L.marker([point.lat, point.lon]).addTo(map);
-                
-                // Aplicar animación de rebote si se especifica
                 if (animate) {
                     marker._icon.classList.add('marker-rebound');
                 }
-
-                // Asignar evento de clic al marcador
                 marker.on('click', () => handleMarkerClick(marker, point));
-                updatePopupContent(marker, point); // Crear el contenido del popup
-                markers.set(point.id, marker); // Guardar referencia al marcador
+                updatePopupContent(marker, point);
+                markers.set(point.id, marker);
             }
 
-            // Actualiza el contenido del popup de un marcador
+            // **CORREGIDO**: Se crean elementos DOM y se asignan listeners 'onclick' directamente.
+            // Esto evita problemas con la delegación de eventos.
             function updatePopupContent(marker, point) {
-                const popupContent = `
-                    <div class="space-y-2">
-                        <p><strong>ID:</strong> ${point.id}</p>
-                        <p><strong>Lat:</strong> ${point.lat.toFixed(5)}</p>
-                        <p><strong>Lon:</strong> ${point.lon.toFixed(5)}</p>
-                        <input type="text" id="name-input-${point.id}" class="w-full border-gray-300 rounded-md shadow-sm p-1" placeholder="Nombre del componente" value="${point.name || ''}">
-                        <button class="action-button save-button" data-id="${point.id}">Guardar Nombre</button>
-                        <button class="action-button delete-button" data-id="${point.id}">Eliminar Marcador</button>
-                    </div>`;
-                marker.bindPopup(popupContent);
+                const container = document.createElement('div');
+                container.className = 'space-y-2';
+                container.innerHTML = `
+                    <p><strong>ID:</strong> ${point.id}</p>
+                    <p><strong>Lat:</strong> ${point.lat.toFixed(5)}</p>
+                    <p><strong>Lon:</strong> ${point.lon.toFixed(5)}</p>
+                    <input type="text" class="w-full border-gray-300 rounded-md shadow-sm p-1 name-input" placeholder="Nombre del componente" value="${point.name || ''}">
+                `;
+
+                const saveBtn = document.createElement('button');
+                saveBtn.className = 'action-button save-button';
+                saveBtn.textContent = 'Guardar Nombre';
+                saveBtn.onclick = async () => {
+                    const name = container.querySelector('.name-input').value;
+                    await savePointName(point.id, name);
+                    marker.closePopup();
+                    await renderAll();
+                    showNotification('Nombre guardado.');
+                };
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'action-button delete-button';
+                deleteBtn.textContent = 'Eliminar Marcador';
+                deleteBtn.onclick = async () => {
+                    if (confirm('¿Estás seguro de que quieres eliminar este marcador y sus conexiones asociadas?')) {
+                        await deletePoint(point.id);
+                        marker.closePopup();
+                        await renderAll();
+                        showNotification('Marcador eliminado.');
+                    }
+                };
+
+                container.appendChild(saveBtn);
+                container.appendChild(deleteBtn);
+
+                // Detener la propagación de eventos para que el clic en el popup no afecte al mapa.
+                L.DomEvent.on(container, 'click', L.DomEvent.stopPropagation);
+                L.DomEvent.on(container, 'mousedown', L.DomEvent.stopPropagation);
+
+                marker.bindPopup(container);
             }
 
-            // Decide qué hacer al hacer clic en un marcador
             function handleMarkerClick(marker, point) {
                 if (isConnecting) {
                     handleConnectionSelection(point);
@@ -181,28 +211,6 @@
                     marker.openPopup();
                 }
             }
-
-            // --- LÓGICA PARA GUARDAR NOMBRE Y ELIMINAR MARCADOR ---
-            // Usamos delegación de eventos en el mapa para capturar clics en los botones del popup
-            document.querySelector('#map').addEventListener('click', async (e) => {
-                // Si se hace clic en el botón de guardar nombre
-                if (e.target.classList.contains('save-button')) {
-                    const pointId = parseInt(e.target.dataset.id);
-                    const name = document.getElementById(`name-input-${pointId}`).value;
-                    await savePointName(pointId, name);
-                    await renderAll(); // Recargamos todo para mantener la consistencia
-                    alert('Nombre guardado.');
-                }
-                // Si se hace clic en el botón de eliminar
-                if (e.target.classList.contains('delete-button')) {
-                    const pointId = parseInt(e.target.dataset.id);
-                    if (confirm('¿Estás seguro de que quieres eliminar este marcador y sus conexiones asociadas?')) {
-                        await deletePoint(pointId);
-                        await renderAll();
-                        alert('Marcador eliminado.');
-                    }
-                }
-            });
 
             // --- LÓGICA DE LA LISTA INFERIOR ---
             function addPointToList(point) {
@@ -229,9 +237,9 @@
                     async (position) => {
                         const { latitude, longitude } = position.coords;
                         const newPoint = { lat: latitude, lon: longitude, name: '' };
-                        const savedPoint = await savePoint(newPoint); // savePoint devuelve el objeto con ID
+                        const savedPoint = await savePoint(newPoint);
                         
-                        addMarkerToMap(savedPoint, true); // Añadir con animación
+                        addMarkerToMap(savedPoint, true);
                         addPointToList(savedPoint);
                         document.getElementById('no-points-msg').style.display = 'none';
 
@@ -240,7 +248,10 @@
                         addMarkerBtn.disabled = false;
                     },
                     (error) => {
-                        alert(`Error al obtener ubicación: ${error.message}`);
+                        // **CORREGIDO**: Mensaje de error más descriptivo.
+                        let message = `Error al obtener ubicación: ${error.message}\n\n`;
+                        message += 'Por favor, asegúrate de haber concedido permisos de ubicación a esta página en la configuración de tu navegador.';
+                        alert(message);
                         addMarkerBtn.textContent = 'Agregar Mi Ubicación';
                         addMarkerBtn.disabled = false;
                     },
@@ -251,13 +262,13 @@
             // --- BOTÓN: CREAR CONEXIÓN ---
             const createConnectionBtn = document.getElementById('create-connection-btn');
             createConnectionBtn.addEventListener('click', () => {
-                if (isConnecting) { // Si ya está en modo conexión, cancela
+                if (isConnecting) {
                     isConnecting = false;
                     originPoint = null;
                     createConnectionBtn.textContent = 'Crear Conexión';
                     createConnectionBtn.classList.remove('bg-yellow-500', 'animate-pulse');
-                    renderAll(); // Para quitar el ícono rojo
-                } else { // Inicia el modo conexión
+                    renderAll();
+                } else {
                     isConnecting = true;
                     originPoint = null;
                     createConnectionBtn.textContent = 'Seleccione Origen...';
@@ -265,39 +276,41 @@
                 }
             });
             
-            // Lógica para seleccionar origen y destino
             function handleConnectionSelection(point) {
                 const marker = markers.get(point.id);
-                if (!originPoint) { // Si es el primer punto (origen)
+                if (!originPoint) {
                     originPoint = point;
                     createConnectionBtn.textContent = 'Seleccione Destino...';
-                    // Cambia el ícono del marcador de origen a rojo para feedback visual
                     marker.setIcon(L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }));
-                } else { // Si es el segundo punto (destino)
+                } else {
                     const destinationPoint = point;
-                    
                     if (originPoint.id === destinationPoint.id) {
                         alert('No se puede conectar un punto consigo mismo.');
                     } else {
                         const connectionName = prompt('Ingrese el nombre de la conexión (ej: Línea de Conducción):');
                         if (connectionName && connectionName.trim() !== '') {
-                            const connection = {
-                                name: connectionName,
-                                originId: originPoint.id,
-                                destinationId: destinationPoint.id
-                            };
+                            const connection = { name: connectionName, originId: originPoint.id, destinationId: destinationPoint.id };
                             saveConnection(connection).then(() => {
-                                alert('Conexión creada con éxito.');
+                                showNotification('Conexión creada con éxito.');
                                 renderAll();
                             });
                         }
                     }
-                    // Finalizar modo conexión
                     isConnecting = false;
                     originPoint = null;
                     createConnectionBtn.textContent = 'Crear Conexión';
                     createConnectionBtn.classList.remove('bg-yellow-500', 'animate-pulse');
                 }
+            }
+            
+            // --- FUNCIÓN DE NOTIFICACIÓN ---
+            function showNotification(message) {
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.classList.add('show');
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 3000); // Ocultar después de 3 segundos
             }
 
             // --- INICIO DE LA APLICACIÓN ---
