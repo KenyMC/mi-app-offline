@@ -16,6 +16,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
 
     <style>
+        /* --- CAMBIO CLAVE PARA EVITAR ACTUALIZACIÓN POR DESLIZAMIENTO --- */
+        html, body {
+            overscroll-behavior-y: contain; /* Evita el "pull-to-refresh" */
+        }
         #map { height: 50vh; width: 100%; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         body { touch-action: none; }
         .modal-overlay {
