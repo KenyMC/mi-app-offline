@@ -1,9 +1,10 @@
-// --- SERVICE WORKER (v8 - con Proj4JS y Caché de Librerías) ---
+// --- SERVICE WORKER (v9 - Solución Offline Completa) ---
 
 // Se incrementa la versión para forzar la actualización del Service Worker
-const CACHE_NAME = 'mi-app-offline-v8-proj4';
+const CACHE_NAME = 'mi-app-offline-v9-full';
 
-// Archivos esenciales para el shell de la aplicación, incluyendo las nuevas librerías.
+// Archivos esenciales para el shell de la aplicación.
+// AHORA INCLUYE TAILWIND CSS PARA QUE LA INTERFAZ CARGUE OFFLINE.
 const APP_SHELL_URLS = [
     './',
     './index.html',
@@ -15,6 +16,7 @@ const APP_SHELL_URLS = [
     // --- LIBRERÍAS AÑADIDAS AL CACHÉ PARA FUNCIONAR OFFLINE ---
     'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js',
+    'https://cdn.tailwindcss.com', // <-- ¡LA CORRECCIÓN CLAVE!
     // --- Imágenes de Leaflet que también deben estar en caché ---
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
@@ -51,7 +53,6 @@ self.addEventListener('activate', event => {
 
 // Evento 'fetch': Sirve contenido desde el caché o la red.
 self.addEventListener('fetch', event => {
-    // Ignoramos peticiones que no sean GET
     if (event.request.method !== 'GET') {
         return;
     }
