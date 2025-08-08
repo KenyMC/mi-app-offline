@@ -1,7 +1,7 @@
-// --- SERVICE WORKER (v10 - Solución Offline Definitiva) ---
+// --- SERVICE WORKER (v11 - Solución Offline Forzada) ---
 
 // Se incrementa la versión para forzar la actualización del Service Worker
-const CACHE_NAME = 'mi-app-offline-v10-final';
+const CACHE_NAME = 'mi-app-offline-v11-force-update';
 
 // Archivos esenciales para el shell de la aplicación.
 const APP_SHELL_URLS = [
