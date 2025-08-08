@@ -48,6 +48,10 @@
     </div>
 
     <main class="flex-grow flex flex-col p-4 space-y-4">
+        
+        <!-- INDICADOR DE ESTADO DE CONEXIÓN -->
+        <div id="status-indicator" class="text-xs text-center p-2 rounded-lg font-bold"></div>
+
         <div id="map" class="bg-gray-300"></div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -122,6 +126,7 @@
             const connectionsList = document.getElementById('connections-list');
             const noPointsMsg = document.getElementById('no-points-msg');
             const noConnectionsMsg = document.getElementById('no-connections-msg');
+            const statusIndicator = document.getElementById('status-indicator');
             
             const modal = document.getElementById('name-modal');
             const modalTitle = document.getElementById('modal-title');
@@ -129,6 +134,20 @@
             const modalOk = document.getElementById('modal-ok');
             const modalCancel = document.getElementById('modal-cancel');
             let modalResolve = null;
+
+            // --- LÓGICA DEL INDICADOR DE CONEXIÓN ---
+            function updateOnlineStatus() {
+                if (navigator.onLine) {
+                    statusIndicator.textContent = 'Estado: Conectado';
+                    statusIndicator.className = 'text-xs text-center p-2 rounded-lg font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+                } else {
+                    statusIndicator.textContent = 'Estado: Sin Conexión (Modo Offline)';
+                    statusIndicator.className = 'text-xs text-center p-2 rounded-lg font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+                }
+            }
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+            updateOnlineStatus(); // Chequeo inicial al cargar la página
 
             function askForName(title, placeholder = '') {
                 modalTitle.textContent = title;
@@ -328,16 +347,13 @@
                 Object.values(leafletMarkers).forEach(m => m.getElement()?.classList.remove('selected'));
             }
             
-            // --- FUNCIÓN HELPER PARA LA LETRA DE ZONA UTM ---
             function getUtmLetterDesignator(latitude) {
                 if (-80 <= latitude && latitude <= 84) {
-                    // Letras C..X, omitiendo I y O
                     return "CDEFGHJKLMNPQRSTUVWXX".charAt(Math.floor((latitude + 80) / 8));
                 }
-                return 'Z'; // Fuera de rango
+                return 'Z';
             }
 
-            // --- LÓGICA PARA EXPORTAR A EXCEL (ACTUALIZADA A Proj4JS) ---
             exportBtn.addEventListener('click', async () => {
                 exportBtn.textContent = 'Exportando...';
                 exportBtn.disabled = true;
