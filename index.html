@@ -12,8 +12,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Librería para exportar a Excel (SheetJS) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <!-- Librería para conversión de coordenadas a UTM -->
-    <script src="https://cdn.jsdelivr.net/npm/utm@1.1.1/utm.min.js"></script>
+    <!-- Librería para conversión de coordenadas a UTM (Proj4JS) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
 
     <style>
         #map { height: 50vh; width: 100%; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -328,13 +328,21 @@
                 Object.values(leafletMarkers).forEach(m => m.getElement()?.classList.remove('selected'));
             }
             
-            // --- LÓGICA PARA EXPORTAR A EXCEL (CORREGIDA) ---
+            // --- FUNCIÓN HELPER PARA LA LETRA DE ZONA UTM ---
+            function getUtmLetterDesignator(latitude) {
+                if (-80 <= latitude && latitude <= 84) {
+                    // Letras C..X, omitiendo I y O
+                    return "CDEFGHJKLMNPQRSTUVWXX".charAt(Math.floor((latitude + 80) / 8));
+                }
+                return 'Z'; // Fuera de rango
+            }
+
+            // --- LÓGICA PARA EXPORTAR A EXCEL (ACTUALIZADA A Proj4JS) ---
             exportBtn.addEventListener('click', async () => {
                 exportBtn.textContent = 'Exportando...';
                 exportBtn.disabled = true;
 
-                // Verificar que las librerías externas estén cargadas
-                if (typeof XLSX === 'undefined' || typeof utm === 'undefined') {
+                if (typeof XLSX === 'undefined' || typeof proj4 === 'undefined') {
                     alert('Las librerías para exportar no se han cargado. Revisa tu conexión a internet e inténtalo de nuevo.');
                     exportBtn.textContent = 'Exportar a Excel';
                     exportBtn.disabled = false;
@@ -345,26 +353,31 @@
                     const points = await getPoints();
                     const connections = await getConnections();
 
-                    // 1. Preparar hoja "Componentes"
                     const componentesData = [
-                        // Encabezado corregido para mayor claridad
                         ['ID Punto', 'Puntos Guardados', 'Zona', 'Este', 'Norte', 'Latitud', 'Longitud']
                     ];
+                    
+                    const wgs84Def = '+proj=longlat +datum=WGS84 +no_defs';
+
                     points.forEach(p => {
-                        // Uso correcto de la librería UTM
-                        const utmCoords = utm.fromLatLon(p.lat, p.lon);
+                        const lon = p.lon;
+                        const lat = p.lat;
+                        const zone = Math.floor((lon + 180) / 6) + 1;
+                        const utmDef = `+proj=utm +zone=${zone} ${lat < 0 ? '+south' : ''} +datum=WGS84 +units=m +no_defs`;
+                        const utmCoords = proj4(wgs84Def, utmDef, [lon, lat]);
+                        const zoneLetter = getUtmLetterDesignator(lat);
+
                         componentesData.push([
                             p.id,
                             p.name || `Punto #${p.id}`,
-                            `${utmCoords.zoneNum}${utmCoords.zoneLetter}`,
-                            utmCoords.easting.toFixed(2),
-                            utmCoords.northing.toFixed(2),
+                            `${zone}${zoneLetter}`,
+                            utmCoords[0].toFixed(2),
+                            utmCoords[1].toFixed(2),
                             p.lat,
                             p.lon
                         ]);
                     });
 
-                    // 2. Preparar hoja "Conexiones"
                     const conexionesData = [
                         ['ID Origen', 'ID Destino', 'Nombre Conexión']
                     ];
@@ -378,7 +391,6 @@
                         }
                     });
 
-                    // 3. Crear y descargar el libro de Excel
                     const wb = XLSX.utils.book_new();
                     const wsComponentes = XLSX.utils.aoa_to_sheet(componentesData);
                     const wsConexiones = XLSX.utils.aoa_to_sheet(conexionesData);
@@ -390,7 +402,7 @@
 
                 } catch (error) {
                     console.error("Error al exportar a Excel:", error);
-                    alert("Hubo un error al generar el archivo de Excel.");
+                    alert("Hubo un error al generar el archivo de Excel. Verifique la consola para más detalles.");
                 } finally {
                     exportBtn.textContent = 'Exportar a Excel';
                     exportBtn.disabled = false;
