@@ -169,6 +169,8 @@
             
             let connectionState = 'idle';
             let connectionPoints = [];
+            let lastMilestone = 0;
+            let fireworksInterval = null;
 
             const addMarkerBtn = document.getElementById('add-marker-btn');
             const connectionBtn = document.getElementById('connection-btn');
@@ -319,14 +321,51 @@
                 updateMotivationalMessage(totalDistance);
             }
             
+            const milestoneMessages = {
+                1: "¡Felicidades, superaste <strong>1 km</strong>! Cada paso cuenta para proteger la salud de muchos.",
+                5: "¡Increíble, ya son <strong>5 km</strong>! Tu esfuerzo se refleja en la sonrisa de niños sanos.",
+                10: "¡<strong>10 km</strong> recorridos! Eres un guardián incansable de la calidad del agua. ¡Sigue así!",
+                15: "¡Ya van <strong>15 km</strong>! Con cada metro, aseguras un futuro más saludable para la comunidad.",
+                20: "¡<strong>20 km</strong>! Tu dedicación es un ejemplo. ¡El agua segura es vida y tú la proteges!",
+                25: "¡Espectacular, <strong>25 km</strong>! Estás a mitad de camino para un gran logro. ¡No te detengas!",
+                30: "¡<strong>30 km</strong>! Tu constancia es admirable. Cada gota de agua limpia es un tesoro que tú cuidas.",
+                35: "¡Impresionante, <strong>35 km</strong>! El impacto de tu trabajo es enorme. ¡Sigue adelante con esa energía!",
+                40: "¡Wow, <strong>40 km</strong>! Eres una pieza clave en la salud pública. ¡Tu labor es fundamental!",
+                45: "¡Casi lo logras, <strong>45 km</strong>! Estás a un paso de una meta increíble. ¡El último esfuerzo vale oro!",
+                50: "¡<strong>MISIÓN CUMPLIDA, 50 KM</strong>! Has alcanzado un hito extraordinario. ¡Gracias a ti, incontables familias tienen salud y bienestar! ¡Eres un héroe!"
+            };
+
             function updateMotivationalMessage(totalDistance) {
-                if (totalDistance > 0) {
-                    const totalKm = (totalDistance / 1000).toFixed(2);
-                    motivationalMessage.innerHTML = `¡Has recorrido <strong>${totalKm} km</strong>! Tu labor es vital para la vigilancia de la calidad del agua. Gracias a ti, un niño está feliz al consumir agua segura.`;
-                    triggerFireworks();
-                } else {
-                    motivationalMessage.innerHTML = 'Comienza a agregar puntos y conexiones para ver tu progreso.';
+                const totalKm = totalDistance / 1000;
+                let message = `¡Has recorrido <strong>${totalKm.toFixed(2)} km</strong>! Tu labor es vital para la vigilancia de la calidad del agua.`;
+                let achievedMilestone = 0;
+
+                // Encontrar el hito más alto alcanzado
+                for (const km in milestoneMessages) {
+                    if (totalKm >= km) {
+                        achievedMilestone = Math.max(achievedMilestone, km);
+                    }
                 }
+
+                if (achievedMilestone > 0) {
+                    message = milestoneMessages[achievedMilestone];
+                    if (achievedMilestone > lastMilestone) {
+                        lastMilestone = achievedMilestone;
+                        if (fireworksInterval) clearInterval(fireworksInterval); // Limpiar intervalo anterior
+                        triggerFireworks(); // Celebración instantánea
+                        fireworksInterval = setInterval(triggerFireworks, 60000); // Celebración cada minuto
+                    }
+                } else {
+                    // Si la distancia baja del último hito, resetear
+                    lastMilestone = 0;
+                    if (fireworksInterval) clearInterval(fireworksInterval);
+                    fireworksInterval = null;
+                    if (totalDistance === 0) {
+                        message = 'Comienza a agregar puntos y conexiones para ver tu progreso.';
+                    }
+                }
+                
+                motivationalMessage.innerHTML = message;
             }
 
             function triggerFireworks() {
