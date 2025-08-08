@@ -74,25 +74,29 @@
 
         <div id="map" class="bg-gray-300"></div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-center">
-                <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95">
-                    Agregar Ubicación
+        <!-- SECCIÓN DE BOTONES MEJORADA -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
+                Agregar Pto.
+            </button>
+            <button id="connection-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
+                Crear Conexión
+            </button>
+            <button id="export-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
+                Exportar Excel
+            </button>
+            <div class="flex items-center justify-center gap-1">
+                <button id="clear-map-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
+                    Limpiar Mapa
                 </button>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-center">
-                 <button id="connection-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95">
-                    Crear Conexión
-                </button>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-center">
-                 <button id="export-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95">
-                    Exportar a Excel
-                </button>
+                <a href="#lists-section" id="scroll-down-btn" class="p-3 bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </a>
             </div>
         </div>
         
-        <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pb-4">
+        <!-- SECCIÓN DE LISTAS CON ID PARA EL SCROLL -->
+        <div id="lists-section" class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pb-4">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
                 <h2 class="text-xl font-bold mb-2 text-center">Puntos Guardados</h2>
                 <ul id="points-list" class="space-y-2 overflow-y-auto">
@@ -141,6 +145,8 @@
             const addMarkerBtn = document.getElementById('add-marker-btn');
             const connectionBtn = document.getElementById('connection-btn');
             const exportBtn = document.getElementById('export-btn');
+            const clearMapBtn = document.getElementById('clear-map-btn');
+            const scrollDownBtn = document.getElementById('scroll-down-btn');
             const pointsList = document.getElementById('points-list');
             const connectionsList = document.getElementById('connections-list');
             const noPointsMsg = document.getElementById('no-points-msg');
@@ -212,7 +218,6 @@
                         const popupContent = `<div class="text-base"><strong class="point-name">${point.name || 'Punto #' + point.id}</strong><p class="text-sm text-gray-500">Lat: ${point.lat.toFixed(5)}, Lon: ${point.lon.toFixed(5)}</p><div class="mt-2 flex space-x-2"><button class="edit-btn text-blue-500" data-id="${point.id}">Editar</button><button class="delete-btn text-red-500" data-id="${point.id}">Eliminar</button></div></div>`;
                         marker.bindPopup(popupContent);
                         
-                        // Etiqueta permanente con el nombre del punto
                         marker.bindTooltip(point.name || `Punto #${point.id}`, { permanent: true, className: 'map-label', offset: [0, -15] });
 
                         const li = document.createElement('li');
@@ -247,7 +252,6 @@
                         
                         if (latlngs.length > 1) {
                             const polyline = L.polyline(latlngs, { color: 'orange' }).addTo(connectionsLayer);
-                            // Etiqueta permanente con el nombre de la conexión en el centro
                             const center = polyline.getCenter();
                             L.tooltip({ permanent: true, direction: 'center', className: 'map-label' }).setLatLng(center).setContent(conn.name).addTo(connectionsLayer);
                         }
@@ -298,18 +302,17 @@
                         if (newName) await updatePoint(pointId, { name: newName });
                         await renderAll();
                         map.setView([latitude, longitude], 18);
-                        addMarkerBtn.textContent = 'Agregar Ubicación';
+                        addMarkerBtn.textContent = 'Agregar Pto.';
                         addMarkerBtn.disabled = false;
                     },
                     (error) => {
                         alert(`Error al obtener ubicación: ${error.message}`);
-                        addMarkerBtn.textContent = 'Agregar Ubicación';
+                        addMarkerBtn.textContent = 'Agregar Pto.';
                         addMarkerBtn.disabled = false;
                     }, { enableHighAccuracy: true }
                 );
             });
             
-            // --- LÓGICA DE CONEXIÓN SIMPLIFICADA ---
             connectionBtn.addEventListener('click', () => {
                 if (connectionState === 'idle') {
                     startConnectionProcess();
@@ -321,7 +324,7 @@
             function startConnectionProcess() {
                 connectionState = 'picking_origin';
                 connectionPoints = [];
-                connectionBtn.textContent = 'Cancelar Conexión';
+                connectionBtn.textContent = 'Cancelar';
                 connectionBtn.classList.replace('bg-green-600', 'bg-red-600');
                 connectionBtn.classList.replace('hover:bg-green-700', 'hover:bg-red-700');
                 alert('Seleccione el PUNTO DE ORIGEN en el mapa.');
@@ -362,6 +365,34 @@
                 });
             }
             
+            // --- LÓGICA BOTÓN LIMPIAR MAPA ---
+            clearMapBtn.addEventListener('click', async () => {
+                const confirmed = confirm('Esta acción eliminará todos los puntos y conexiones. ¿Estás seguro?');
+                if (confirmed) {
+                    try {
+                        const points = await getPoints();
+                        const connections = await getConnections();
+                        
+                        const deletePointsPromises = points.map(p => deletePoint(p.id));
+                        const deleteConnectionsPromises = connections.map(c => deleteConnection(c.id));
+                        
+                        await Promise.all([...deletePointsPromises, ...deleteConnectionsPromises]);
+                        
+                        await renderAll();
+                        alert('Todos los datos han sido eliminados.');
+                    } catch (error) {
+                        console.error('Error al limpiar el mapa:', error);
+                        alert('Hubo un error al eliminar los datos.');
+                    }
+                }
+            });
+
+            // --- LÓGICA BOTÓN SCROLL ---
+            scrollDownBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('lists-section').scrollIntoView({ behavior: 'smooth' });
+            });
+
             function getUtmLetterDesignator(latitude) {
                 if (-80 <= latitude && latitude <= 84) return "CDEFGHJKLMNPQRSTUVWXX".charAt(Math.floor((latitude + 80) / 8));
                 return 'Z';
@@ -412,7 +443,7 @@
                     console.error("Error al exportar a Excel:", error);
                     alert("Hubo un error al generar el archivo de Excel. Verifique la consola para más detalles.");
                 } finally {
-                    exportBtn.textContent = 'Exportar a Excel';
+                    exportBtn.textContent = 'Exportar Excel';
                     exportBtn.disabled = false;
                 }
             });
