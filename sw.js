@@ -20,14 +20,10 @@ self.addEventListener('install', event => {
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Cache v7 abierto. Guardando App Shell...');
-                // Cacheamos los íconos por defecto y el rojo para la selección
-                return Promise.all([
-                    cache.addAll(APP_SHELL_URLS),
-                    cache.addAll([
-                        'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-                        'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-                        'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x-red.png'
-                    ])
+                cache.addAll(APP_SHELL_URLS);
+                return cache.addAll([
+                    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
                 ]);
             })
             .then(() => self.skipWaiting())
@@ -73,7 +69,8 @@ self.addEventListener('fetch', event => {
         return; // Termina aquí para las teselas
     }
 
-    // Estrategia para todo lo demás (App Shell): Cache First
+    // Estrategia para todo lo demás (App Shell): Cache First, con fallback a la red y a la página principal.
+    // ESTA ES LA SOLUCIÓN DEFINITIVA PARA EL REFRESH OFFLINE.
     event.respondWith(
         caches.match(event.request)
             .then(cachedResponse => {
@@ -83,14 +80,17 @@ self.addEventListener('fetch', event => {
                 }
                 
                 // Si no está en caché, lo busca en la red.
-                return fetch(event.request).catch(() => {
-                    // Si la red falla y es una petición de navegación (actualizar)...
-                    if (event.request.mode === 'navigate') {
-                        // ...devuelve la página principal desde el caché.
-                        return caches.match('./index.html');
-                    }
-                    return null;
-                });
+                return fetch(event.request)
+                    .catch(() => {
+                        // Si la red falla y es una petición de navegación (actualizar)...
+                        if (event.request.mode === 'navigate') {
+                            // ...devuelve la página principal desde el caché.
+                            console.log('Fallback de navegación: devolviendo index.html desde caché');
+                            return caches.match('./index.html');
+                        }
+                        // Si no, la petición falla.
+                        return null;
+                    });
             })
     );
 });
