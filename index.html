@@ -127,8 +127,11 @@
     <script src="indexedDB.js"></script>
 
     <script>
-        function viewPointOnMap(id, lat, lon) {
-            window.myApp.viewPoint(id, lat, lon);
+        function viewPointOnMap(id) {
+            window.myApp.viewPoint(id);
+        }
+        function viewConnectionOnMap(id) {
+            window.myApp.viewConnection(id);
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -147,8 +150,9 @@
             const markersLayer = L.layerGroup().addTo(map);
             const connectionsLayer = L.layerGroup().addTo(map);
             let leafletMarkers = {};
+            let leafletConnections = {};
             
-            let connectionState = 'idle'; // 'idle', 'picking_origin', 'picking_destination'
+            let connectionState = 'idle';
             let connectionPoints = [];
 
             const addMarkerBtn = document.getElementById('add-marker-btn');
@@ -232,7 +236,7 @@
 
                         const li = document.createElement('li');
                         li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded flex justify-between items-center';
-                        li.innerHTML = `<span>${point.name || `Punto #${point.id}`}</span> <button class="text-xs text-blue-500 font-semibold" onclick="viewPointOnMap(${point.id}, ${point.lat}, ${point.lon})">Ver</button>`;
+                        li.innerHTML = `<span>${point.name || `Punto #${point.id}`}</span> <button class="text-xs text-blue-500 font-semibold" onclick="viewPointOnMap(${point.id})">Ver</button>`;
                         pointsList.appendChild(li);
 
                         marker.on('click', () => handleMarkerClick(point));
@@ -240,14 +244,25 @@
                 }
             }
             
-            window.myApp.viewPoint = (id, lat, lon) => {
-                map.setView([lat, lon], 18);
+            window.myApp.viewPoint = (id) => {
                 const marker = leafletMarkers[id];
-                if (marker) marker.openPopup();
+                if (marker) {
+                    map.setView(marker.getLatLng(), 18);
+                    marker.openPopup();
+                }
+            };
+            
+            window.myApp.viewConnection = (id) => {
+                const polyline = leafletConnections[id];
+                if(polyline) {
+                    map.fitBounds(polyline.getBounds().pad(0.1)); // pad(0.1) da un poco de margen
+                    polyline.openPopup();
+                }
             };
 
             async function renderConnections() {
                 connectionsLayer.clearLayers();
+                leafletConnections = {};
                 connectionsList.innerHTML = '';
                 const connections = await getConnections();
                 const points = await getPoints();
@@ -262,14 +277,19 @@
                         
                         if (latlngs.length > 1) {
                             const polyline = L.polyline(latlngs, { color: 'orange' }).addTo(connectionsLayer);
+                            leafletConnections[conn.id] = polyline;
+
+                            const popupContent = `<div class="text-base"><strong>${conn.name}</strong><div class="mt-2 flex space-x-2"><button class="edit-conn-btn text-blue-500" data-id="${conn.id}">Editar</button><button class="delete-conn-btn text-red-500" data-id="${conn.id}">Eliminar</button></div></div>`;
+                            polyline.bindPopup(popupContent);
+                            
                             const center = polyline.getCenter();
                             L.tooltip({ permanent: true, direction: 'center', className: 'map-label' }).setLatLng(center).setContent(conn.name).addTo(connectionsLayer);
-                        }
 
-                        const li = document.createElement('li');
-                        li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded flex justify-between items-center';
-                        li.innerHTML = `<span>${conn.name}</span> <button class="delete-conn-btn text-xs text-red-500" data-id="${conn.id}">X</button>`;
-                        connectionsList.appendChild(li);
+                            const li = document.createElement('li');
+                            li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded flex justify-between items-center';
+                            li.innerHTML = `<span>${conn.name}</span> <button class="text-xs text-blue-500 font-semibold" onclick="viewConnectionOnMap(${conn.id})">Ver</button>`;
+                            connectionsList.appendChild(li);
+                        }
                     });
                 }
             }
@@ -292,10 +312,20 @@
                         await renderAll();
                     }
                 }
+                if (e.target.matches('.edit-conn-btn')) {
+                    const connId = Number(e.target.dataset.id);
+                    const newName = await askForName('Editar nombre de la conexión', 'Nuevo nombre');
+                    if (newName !== null) {
+                        await updateConnection(connId, { name: newName });
+                        map.closePopup();
+                        await renderAll();
+                    }
+                }
                 if (e.target.matches('.delete-conn-btn')) {
                     const connId = Number(e.target.dataset.id);
                     if (confirm('¿Seguro que quieres eliminar esta conexión?')) {
                         await deleteConnection(connId);
+                        map.closePopup();
                         await renderAll();
                     }
                 }
@@ -381,12 +411,9 @@
                     try {
                         const points = await getPoints();
                         const connections = await getConnections();
-                        
                         const deletePointsPromises = points.map(p => deletePoint(p.id));
                         const deleteConnectionsPromises = connections.map(c => deleteConnection(c.id));
-                        
                         await Promise.all([...deletePointsPromises, ...deleteConnectionsPromises]);
-                        
                         await renderAll();
                         alert('Todos los datos han sido eliminados.');
                     } catch (error) {
