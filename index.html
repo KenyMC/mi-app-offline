@@ -8,13 +8,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
     <style>
-        #map { height: 100vh; width: 100%; }
+        /* Estilos generales y del mapa */
+        /* CORRECCIÓN: Se cambió height de 100vh a 100% para que el mapa ocupe el contenedor 'main' */
+        #map { height: 100%; width: 100%; }
         body { touch-action: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
         
-        /* Efecto de rebote del marcador */
+        /* Efecto de rebote del marcador al ser añadido */
         @keyframes drop {
             0% { transform: translateY(-200px) scaleY(0.9); opacity: 0; }
             5% { opacity: 0.7; }
@@ -27,8 +30,10 @@
             animation: drop 0.6s cubic-bezier(0.32, 0, 0.67, 0) forwards;
             transform-origin: bottom center;
         }
+
+        /* Estilos para los popups de Leaflet */
         .leaflet-popup-content-wrapper { border-radius: 0.5rem; }
-        .leaflet-popup-content { font-size: 14px; line-height: 1.6; }
+        .leaflet-popup-content { font-size: 14px; line-height: 1.6; width: 200px !important; }
         .leaflet-popup-content .action-button {
             width: 100%;
             padding: 8px;
@@ -49,6 +54,7 @@
 <body class="bg-gray-100 dark:bg-gray-900">
 
     <main class="relative h-screen">
+        <!-- Contenedor de botones flotando sobre el mapa -->
         <div id="controls-container" class="absolute top-4 left-4 z-[1000] flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2">
             <button id="add-marker-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition-transform transform active:scale-95">
                 Agregar Mi Ubicación
@@ -58,8 +64,10 @@
             </button>
         </div>
 
+        <!-- Contenedor del mapa -->
         <div id="map"></div>
 
+        <!-- Panel inferior con la lista de puntos y conexiones -->
         <div class="absolute bottom-0 left-0 right-0 z-[1000] bg-white dark:bg-gray-800 p-4 shadow-lg rounded-t-xl max-h-48 overflow-y-auto">
             <h2 class="text-xl font-bold mb-2 text-center text-gray-900 dark:text-gray-100">Elementos Guardados</h2>
             <ul id="points-list" class="space-y-2 text-gray-900 dark:text-gray-200">
@@ -68,36 +76,233 @@
         </div>
     </main>
 
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- IndexedDB Helper -->
     <script src="indexedDB.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
+            // Registrar el Service Worker para funcionamiento offline
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js').then(reg => console.log('Service Worker registrado', reg)).catch(err => console.error('Error al registrar SW', err));
             }
 
+            // Inicializar la base de datos IndexedDB
             await initDB();
 
+            // Inicializar el mapa de Leaflet
             const map = L.map('map').setView([-13.5226, -71.9673], 13);
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri'
             }).addTo(map);
 
+            // Variables de estado de la aplicación
             let isConnecting = false;
             let originPoint = null;
-            const markers = new Map();
+            const markers = new Map(); // Para mantener una referencia a los marcadores de Leaflet por ID
 
-            // --- RENDERIZADO PRINCIPAL ---
+            // --- FUNCIÓN DE RENDERIZADO PRINCIPAL ---
+            // Esta función se encarga de dibujar todo en el mapa y en la lista
             async function renderAll() {
-                // Limpiar mapa y lista
+                // Limpiar capas existentes en el mapa (marcadores y líneas)
                 map.eachLayer(layer => {
                     if (layer instanceof L.Marker || layer instanceof L.Polyline) {
                         map.removeLayer(layer);
                     }
                 });
-                markers.clear();
+                markers.clear(); // Limpiar el mapa de referencias a marcadores
+
+                // Limpiar la lista de elementos en el panel inferior
                 const pointsList = document.getElementById('points-list');
                 const noPointsMsg = document.getElementById('no-points-msg');
                 pointsList.innerHTML = '';
-                points
+                pointsList.appendChild(noPointsMsg);
+                
+                // Cargar y dibujar los puntos (marcadores) desde la DB
+                const points = await getPoints();
+                if (points.length > 0) noPointsMsg.style.display = 'none';
+                else noPointsMsg.style.display = 'block';
+
+                points.forEach(point => {
+                    addMarkerToMap(point, false); // Añadir sin animación al cargar
+                    addPointToList(point);
+                });
+
+                // Cargar y dibujar las conexiones (líneas) desde la DB
+                const connections = await getConnections();
+                connections.forEach(conn => {
+                    const origin = points.find(p => p.id === conn.originId);
+                    const destination = points.find(p => p.id === conn.destinationId);
+                    if (origin && destination) {
+                        L.polyline([[origin.lat, origin.lon], [destination.lat, destination.lon]], {
+                            color: 'orange',
+                            weight: 3
+                        }).addTo(map).bindPopup(`<b>Conexión:</b> ${conn.name}`);
+                        addConnectionToList(conn);
+                    }
+                });
+            }
+
+            // --- MANEJO DE MARCADORES ---
+            function addMarkerToMap(point, animate) {
+                const marker = L.marker([point.lat, point.lon]).addTo(map);
+                
+                // Aplicar animación de rebote si se especifica
+                if (animate) {
+                    marker._icon.classList.add('marker-rebound');
+                }
+
+                // Asignar evento de clic al marcador
+                marker.on('click', () => handleMarkerClick(marker, point));
+                updatePopupContent(marker, point); // Crear el contenido del popup
+                markers.set(point.id, marker); // Guardar referencia al marcador
+            }
+
+            // Actualiza el contenido del popup de un marcador
+            function updatePopupContent(marker, point) {
+                const popupContent = `
+                    <div class="space-y-2">
+                        <p><strong>ID:</strong> ${point.id}</p>
+                        <p><strong>Lat:</strong> ${point.lat.toFixed(5)}</p>
+                        <p><strong>Lon:</strong> ${point.lon.toFixed(5)}</p>
+                        <input type="text" id="name-input-${point.id}" class="w-full border-gray-300 rounded-md shadow-sm p-1" placeholder="Nombre del componente" value="${point.name || ''}">
+                        <button class="action-button save-button" data-id="${point.id}">Guardar Nombre</button>
+                        <button class="action-button delete-button" data-id="${point.id}">Eliminar Marcador</button>
+                    </div>`;
+                marker.bindPopup(popupContent);
+            }
+
+            // Decide qué hacer al hacer clic en un marcador
+            function handleMarkerClick(marker, point) {
+                if (isConnecting) {
+                    handleConnectionSelection(point);
+                } else {
+                    marker.openPopup();
+                }
+            }
+
+            // --- LÓGICA PARA GUARDAR NOMBRE Y ELIMINAR MARCADOR ---
+            // Usamos delegación de eventos en el mapa para capturar clics en los botones del popup
+            document.querySelector('#map').addEventListener('click', async (e) => {
+                // Si se hace clic en el botón de guardar nombre
+                if (e.target.classList.contains('save-button')) {
+                    const pointId = parseInt(e.target.dataset.id);
+                    const name = document.getElementById(`name-input-${pointId}`).value;
+                    await savePointName(pointId, name);
+                    await renderAll(); // Recargamos todo para mantener la consistencia
+                    alert('Nombre guardado.');
+                }
+                // Si se hace clic en el botón de eliminar
+                if (e.target.classList.contains('delete-button')) {
+                    const pointId = parseInt(e.target.dataset.id);
+                    if (confirm('¿Estás seguro de que quieres eliminar este marcador y sus conexiones asociadas?')) {
+                        await deletePoint(pointId);
+                        await renderAll();
+                        alert('Marcador eliminado.');
+                    }
+                }
+            });
+
+            // --- LÓGICA DE LA LISTA INFERIOR ---
+            function addPointToList(point) {
+                const li = document.createElement('li');
+                li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded';
+                li.textContent = `Punto #${point.id}: ${point.name || '(sin nombre)'}`;
+                document.getElementById('points-list').appendChild(li);
+            }
+
+            function addConnectionToList(conn) {
+                const li = document.createElement('li');
+                li.className = 'bg-orange-100 dark:bg-orange-900/50 p-2 rounded';
+                li.textContent = `Conexión: ${conn.name}`;
+                document.getElementById('points-list').appendChild(li);
+            }
+            
+            // --- BOTÓN: AGREGAR UBICACIÓN ACTUAL ---
+            const addMarkerBtn = document.getElementById('add-marker-btn');
+            addMarkerBtn.addEventListener('click', () => {
+                addMarkerBtn.textContent = 'Obteniendo...';
+                addMarkerBtn.disabled = true;
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        const newPoint = { lat: latitude, lon: longitude, name: '' };
+                        const savedPoint = await savePoint(newPoint); // savePoint devuelve el objeto con ID
+                        
+                        addMarkerToMap(savedPoint, true); // Añadir con animación
+                        addPointToList(savedPoint);
+                        document.getElementById('no-points-msg').style.display = 'none';
+
+                        map.setView([latitude, longitude], 18);
+                        addMarkerBtn.textContent = 'Agregar Mi Ubicación';
+                        addMarkerBtn.disabled = false;
+                    },
+                    (error) => {
+                        alert(`Error al obtener ubicación: ${error.message}`);
+                        addMarkerBtn.textContent = 'Agregar Mi Ubicación';
+                        addMarkerBtn.disabled = false;
+                    },
+                    { enableHighAccuracy: true }
+                );
+            });
+
+            // --- BOTÓN: CREAR CONEXIÓN ---
+            const createConnectionBtn = document.getElementById('create-connection-btn');
+            createConnectionBtn.addEventListener('click', () => {
+                if (isConnecting) { // Si ya está en modo conexión, cancela
+                    isConnecting = false;
+                    originPoint = null;
+                    createConnectionBtn.textContent = 'Crear Conexión';
+                    createConnectionBtn.classList.remove('bg-yellow-500', 'animate-pulse');
+                    renderAll(); // Para quitar el ícono rojo
+                } else { // Inicia el modo conexión
+                    isConnecting = true;
+                    originPoint = null;
+                    createConnectionBtn.textContent = 'Seleccione Origen...';
+                    createConnectionBtn.classList.add('bg-yellow-500', 'animate-pulse');
+                }
+            });
+            
+            // Lógica para seleccionar origen y destino
+            function handleConnectionSelection(point) {
+                const marker = markers.get(point.id);
+                if (!originPoint) { // Si es el primer punto (origen)
+                    originPoint = point;
+                    createConnectionBtn.textContent = 'Seleccione Destino...';
+                    // Cambia el ícono del marcador de origen a rojo para feedback visual
+                    marker.setIcon(L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }));
+                } else { // Si es el segundo punto (destino)
+                    const destinationPoint = point;
+                    
+                    if (originPoint.id === destinationPoint.id) {
+                        alert('No se puede conectar un punto consigo mismo.');
+                    } else {
+                        const connectionName = prompt('Ingrese el nombre de la conexión (ej: Línea de Conducción):');
+                        if (connectionName && connectionName.trim() !== '') {
+                            const connection = {
+                                name: connectionName,
+                                originId: originPoint.id,
+                                destinationId: destinationPoint.id
+                            };
+                            saveConnection(connection).then(() => {
+                                alert('Conexión creada con éxito.');
+                                renderAll();
+                            });
+                        }
+                    }
+                    // Finalizar modo conexión
+                    isConnecting = false;
+                    originPoint = null;
+                    createConnectionBtn.textContent = 'Crear Conexión';
+                    createConnectionBtn.classList.remove('bg-yellow-500', 'animate-pulse');
+                }
+            }
+
+            // --- INICIO DE LA APLICACIÓN ---
+            await renderAll();
+        });
+    </script>
+</body>
+</html>
