@@ -28,8 +28,22 @@
             background: white; padding: 20px; border-radius: 8px;
             width: 90%; max-width: 400px;
         }
-        .leaflet-marker-icon.selected {
-            filter: hue-rotate(120deg) brightness(1.5);
+        .leaflet-marker-icon.selected-origin {
+            filter: hue-rotate(240deg) brightness(1.5); /* Azul brillante */
+        }
+        .leaflet-marker-icon.selected-destination {
+            filter: hue-rotate(120deg) brightness(1.5); /* Verde brillante */
+        }
+        /* Estilos para las etiquetas en el mapa */
+        .map-label {
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: bold;
+            box-shadow: none;
         }
     </style>
 </head>
@@ -49,8 +63,14 @@
 
     <main class="flex-grow flex flex-col p-4 space-y-4">
         
-        <!-- INDICADOR DE ESTADO DE CONEXIÓN -->
-        <div id="status-indicator" class="text-xs text-center p-2 rounded-lg font-bold"></div>
+        <div class="text-center">
+            <!-- INDICADOR DE ESTADO DE CONEXIÓN -->
+            <div id="status-indicator" class="text-xs p-2 rounded-lg font-bold inline-block"></div>
+            <!-- MENSAJE DE AYUDA PARA MODO OFFLINE -->
+            <p id="offline-map-tip" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <b>Tip:</b> Para usar el mapa sin conexión, navega por tu zona de trabajo mientras tengas internet. La app guardará esa área.
+            </p>
+        </div>
 
         <div id="map" class="bg-gray-300"></div>
 
@@ -94,13 +114,12 @@
     <script src="indexedDB.js"></script>
 
     <script>
-        // --- FUNCIÓN GLOBAL PARA MANEJAR CLIC EN "VER" ---
         function viewPointOnMap(id, lat, lon) {
             window.myApp.viewPoint(id, lat, lon);
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            window.myApp = {}; // Namespace para la app
+            window.myApp = {}; 
 
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js').then(reg => console.log('Service Worker registrado', reg)).catch(err => console.error('Error al registrar SW', err));
@@ -116,8 +135,8 @@
             const connectionsLayer = L.layerGroup().addTo(map);
             let leafletMarkers = {};
             
-            let isConnecting = false;
-            let selectedPointsForConnection = [];
+            let connectionState = 'idle'; // 'idle', 'picking_origin', 'picking_destination'
+            let connectionPoints = [];
 
             const addMarkerBtn = document.getElementById('add-marker-btn');
             const connectionBtn = document.getElementById('connection-btn');
@@ -127,6 +146,7 @@
             const noPointsMsg = document.getElementById('no-points-msg');
             const noConnectionsMsg = document.getElementById('no-connections-msg');
             const statusIndicator = document.getElementById('status-indicator');
+            const offlineTip = document.getElementById('offline-map-tip');
             
             const modal = document.getElementById('name-modal');
             const modalTitle = document.getElementById('modal-title');
@@ -135,19 +155,20 @@
             const modalCancel = document.getElementById('modal-cancel');
             let modalResolve = null;
 
-            // --- LÓGICA DEL INDICADOR DE CONEXIÓN ---
             function updateOnlineStatus() {
                 if (navigator.onLine) {
                     statusIndicator.textContent = 'Estado: Conectado';
-                    statusIndicator.className = 'text-xs text-center p-2 rounded-lg font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+                    statusIndicator.className = 'text-xs p-2 rounded-lg font-bold inline-block bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+                    offlineTip.style.display = 'block';
                 } else {
                     statusIndicator.textContent = 'Estado: Sin Conexión (Modo Offline)';
-                    statusIndicator.className = 'text-xs text-center p-2 rounded-lg font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+                    statusIndicator.className = 'text-xs p-2 rounded-lg font-bold inline-block bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+                    offlineTip.style.display = 'none';
                 }
             }
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
-            updateOnlineStatus(); // Chequeo inicial al cargar la página
+            updateOnlineStatus();
 
             function askForName(title, placeholder = '') {
                 modalTitle.textContent = title;
@@ -188,27 +209,18 @@
                         const marker = L.marker([point.lat, point.lon]).addTo(markersLayer);
                         leafletMarkers[point.id] = marker;
 
-                        const popupContent = `
-                            <div class="text-base">
-                                <strong class="point-name">${point.name || 'Punto #' + point.id}</strong>
-                                <p class="text-sm text-gray-500">Lat: ${point.lat.toFixed(5)}, Lon: ${point.lon.toFixed(5)}</p>
-                                <div class="mt-2 flex space-x-2">
-                                    <button class="edit-btn text-blue-500" data-id="${point.id}">Editar Nombre</button>
-                                    <button class="delete-btn text-red-500" data-id="${point.id}">Eliminar</button>
-                                </div>
-                            </div>`;
+                        const popupContent = `<div class="text-base"><strong class="point-name">${point.name || 'Punto #' + point.id}</strong><p class="text-sm text-gray-500">Lat: ${point.lat.toFixed(5)}, Lon: ${point.lon.toFixed(5)}</p><div class="mt-2 flex space-x-2"><button class="edit-btn text-blue-500" data-id="${point.id}">Editar</button><button class="delete-btn text-red-500" data-id="${point.id}">Eliminar</button></div></div>`;
                         marker.bindPopup(popupContent);
                         
+                        // Etiqueta permanente con el nombre del punto
+                        marker.bindTooltip(point.name || `Punto #${point.id}`, { permanent: true, className: 'map-label', offset: [0, -15] });
+
                         const li = document.createElement('li');
                         li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded flex justify-between items-center';
                         li.innerHTML = `<span>${point.name || `Punto #${point.id}`}</span> <button class="text-xs text-blue-500 font-semibold" onclick="viewPointOnMap(${point.id}, ${point.lat}, ${point.lon})">Ver</button>`;
                         pointsList.appendChild(li);
 
-                        marker.on('click', () => {
-                            if (isConnecting) {
-                                togglePointSelection(point);
-                            }
-                        });
+                        marker.on('click', () => handleMarkerClick(point));
                     });
                 }
             }
@@ -216,9 +228,7 @@
             window.myApp.viewPoint = (id, lat, lon) => {
                 map.setView([lat, lon], 18);
                 const marker = leafletMarkers[id];
-                if (marker) {
-                    marker.openPopup();
-                }
+                if (marker) marker.openPopup();
             };
 
             async function renderConnections() {
@@ -233,13 +243,13 @@
                 } else {
                     noConnectionsMsg.style.display = 'none';
                     connections.forEach(conn => {
-                        const latlngs = conn.pointIds
-                            .map(id => points.find(p => p.id === id))
-                            .filter(p => p)
-                            .map(p => [p.lat, p.lon]);
+                        const latlngs = conn.pointIds.map(id => points.find(p => p.id === id)).filter(p => p).map(p => [p.lat, p.lon]);
                         
                         if (latlngs.length > 1) {
-                            L.polyline(latlngs, { color: 'orange' }).addTo(connectionsLayer);
+                            const polyline = L.polyline(latlngs, { color: 'orange' }).addTo(connectionsLayer);
+                            // Etiqueta permanente con el nombre de la conexión en el centro
+                            const center = polyline.getCenter();
+                            L.tooltip({ permanent: true, direction: 'center', className: 'map-label' }).setLatLng(center).setContent(conn.name).addTo(connectionsLayer);
                         }
 
                         const li = document.createElement('li');
@@ -285,9 +295,7 @@
                         const { latitude, longitude } = position.coords;
                         const pointId = await savePoint({ lat: latitude, lon: longitude });
                         const newName = await askForName('Nombre del nuevo punto', `Punto #${pointId}`);
-                        if (newName) {
-                            await updatePoint(pointId, { name: newName });
-                        }
+                        if (newName) await updatePoint(pointId, { name: newName });
                         await renderAll();
                         map.setView([latitude, longitude], 18);
                         addMarkerBtn.textContent = 'Agregar Ubicación';
@@ -301,56 +309,61 @@
                 );
             });
             
-            connectionBtn.addEventListener('click', async () => {
-                isConnecting = !isConnecting;
-                if (isConnecting) {
-                    connectionBtn.textContent = 'Finalizar Conexión (0)';
-                    connectionBtn.classList.replace('bg-green-600', 'bg-yellow-500');
-                    connectionBtn.classList.replace('hover:bg-green-700', 'hover:bg-yellow-600');
-                    selectedPointsForConnection = [];
-                    alert('Modo Conexión: Haz clic en los marcadores del mapa para unirlos.');
+            // --- LÓGICA DE CONEXIÓN SIMPLIFICADA ---
+            connectionBtn.addEventListener('click', () => {
+                if (connectionState === 'idle') {
+                    startConnectionProcess();
                 } else {
-                    if (selectedPointsForConnection.length >= 2) {
-                        const connName = await askForName('Nombre de la Conexión', 'Mi Ruta');
-                        if (connName) {
-                            const pointIds = selectedPointsForConnection.map(p => p.id);
-                            await saveConnection({ name: connName, pointIds: pointIds });
-                        }
-                    } else {
-                         alert('Necesitas seleccionar al menos 2 puntos.');
+                    resetConnectionState();
+                }
+            });
+
+            function startConnectionProcess() {
+                connectionState = 'picking_origin';
+                connectionPoints = [];
+                connectionBtn.textContent = 'Cancelar Conexión';
+                connectionBtn.classList.replace('bg-green-600', 'bg-red-600');
+                connectionBtn.classList.replace('hover:bg-green-700', 'hover:bg-red-700');
+                alert('Seleccione el PUNTO DE ORIGEN en el mapa.');
+            }
+
+            async function handleMarkerClick(point) {
+                if (connectionState === 'picking_origin') {
+                    connectionPoints.push(point);
+                    leafletMarkers[point.id].getElement().classList.add('selected-origin');
+                    connectionState = 'picking_destination';
+                    alert('Seleccione el PUNTO DE DESTINO en el mapa.');
+                } else if (connectionState === 'picking_destination') {
+                    if (point.id === connectionPoints[0].id) {
+                        alert('No puedes conectar un punto consigo mismo.');
+                        return;
+                    }
+                    connectionPoints.push(point);
+                    leafletMarkers[point.id].getElement().classList.add('selected-destination');
+                    
+                    const connName = await askForName('Nombre de la Conexión', 'Mi Ruta');
+                    if (connName) {
+                        const pointIds = connectionPoints.map(p => p.id);
+                        await saveConnection({ name: connName, pointIds: pointIds });
                     }
                     resetConnectionState();
                     await renderAll();
                 }
-            });
-
-            function togglePointSelection(point) {
-                const marker = leafletMarkers[point.id];
-                const index = selectedPointsForConnection.findIndex(p => p.id === point.id);
-
-                if (index > -1) {
-                    selectedPointsForConnection.splice(index, 1);
-                    marker.getElement().classList.remove('selected');
-                } else {
-                    selectedPointsForConnection.push(point);
-                    marker.getElement().classList.add('selected');
-                }
-                connectionBtn.textContent = `Finalizar Conexión (${selectedPointsForConnection.length})`;
             }
 
             function resetConnectionState() {
-                isConnecting = false;
+                connectionState = 'idle';
+                connectionPoints = [];
                 connectionBtn.textContent = 'Crear Conexión';
-                connectionBtn.classList.replace('bg-yellow-500', 'bg-green-600');
-                connectionBtn.classList.replace('hover:bg-yellow-600', 'hover:bg-green-700');
-                selectedPointsForConnection = [];
-                Object.values(leafletMarkers).forEach(m => m.getElement()?.classList.remove('selected'));
+                connectionBtn.classList.replace('bg-red-600', 'bg-green-600');
+                connectionBtn.classList.replace('hover:bg-red-700', 'hover:bg-green-700');
+                Object.values(leafletMarkers).forEach(m => {
+                    m.getElement()?.classList.remove('selected-origin', 'selected-destination');
+                });
             }
             
             function getUtmLetterDesignator(latitude) {
-                if (-80 <= latitude && latitude <= 84) {
-                    return "CDEFGHJKLMNPQRSTUVWXX".charAt(Math.floor((latitude + 80) / 8));
-                }
+                if (-80 <= latitude && latitude <= 84) return "CDEFGHJKLMNPQRSTUVWXX".charAt(Math.floor((latitude + 80) / 8));
                 return 'Z';
             }
 
@@ -368,11 +381,7 @@
                 try {
                     const points = await getPoints();
                     const connections = await getConnections();
-
-                    const componentesData = [
-                        ['ID Punto', 'Puntos Guardados', 'Zona', 'Este', 'Norte', 'Latitud', 'Longitud']
-                    ];
-                    
+                    const componentesData = [['ID Punto', 'Puntos Guardados', 'Zona', 'Este', 'Norte', 'Latitud', 'Longitud']];
                     const wgs84Def = '+proj=longlat +datum=WGS84 +no_defs';
 
                     points.forEach(p => {
@@ -382,38 +391,21 @@
                         const utmDef = `+proj=utm +zone=${zone} ${lat < 0 ? '+south' : ''} +datum=WGS84 +units=m +no_defs`;
                         const utmCoords = proj4(wgs84Def, utmDef, [lon, lat]);
                         const zoneLetter = getUtmLetterDesignator(lat);
-
-                        componentesData.push([
-                            p.id,
-                            p.name || `Punto #${p.id}`,
-                            `${zone}${zoneLetter}`,
-                            utmCoords[0].toFixed(2),
-                            utmCoords[1].toFixed(2),
-                            p.lat,
-                            p.lon
-                        ]);
+                        componentesData.push([p.id, p.name || `Punto #${p.id}`, `${zone}${zoneLetter}`, utmCoords[0].toFixed(2), utmCoords[1].toFixed(2), p.lat, p.lon]);
                     });
 
-                    const conexionesData = [
-                        ['ID Origen', 'ID Destino', 'Nombre Conexión']
-                    ];
+                    const conexionesData = [['ID Origen', 'ID Destino', 'Nombre Conexión']];
                     connections.forEach(conn => {
                         for (let i = 0; i < conn.pointIds.length - 1; i++) {
-                            conexionesData.push([
-                                conn.pointIds[i],
-                                conn.pointIds[i+1],
-                                conn.name
-                            ]);
+                            conexionesData.push([conn.pointIds[i], conn.pointIds[i+1], conn.name]);
                         }
                     });
 
                     const wb = XLSX.utils.book_new();
                     const wsComponentes = XLSX.utils.aoa_to_sheet(componentesData);
                     const wsConexiones = XLSX.utils.aoa_to_sheet(conexionesData);
-
                     XLSX.utils.book_append_sheet(wb, wsComponentes, 'Componentes');
                     XLSX.utils.book_append_sheet(wb, wsConexiones, 'Conexiones');
-
                     XLSX.writeFile(wb, 'GeoSAP_reporte.xlsx');
 
                 } catch (error) {
