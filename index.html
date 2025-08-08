@@ -91,7 +91,6 @@
 
     <script>
         // --- FUNCIÓN GLOBAL PARA MANEJAR CLIC EN "VER" ---
-        // Se define globalmente para ser accesible desde el `onclick` del HTML
         function viewPointOnMap(id, lat, lon) {
             window.myApp.viewPoint(id, lat, lon);
         }
@@ -195,7 +194,6 @@
                 }
             }
             
-            // --- NUEVA FUNCIÓN PARA CENTRAR Y ABRIR POPUP ---
             window.myApp.viewPoint = (id, lat, lon) => {
                 map.setView([lat, lon], 18);
                 const marker = leafletMarkers[id];
@@ -330,10 +328,18 @@
                 Object.values(leafletMarkers).forEach(m => m.getElement()?.classList.remove('selected'));
             }
             
-            // --- LÓGICA PARA EXPORTAR A EXCEL ---
+            // --- LÓGICA PARA EXPORTAR A EXCEL (CORREGIDA) ---
             exportBtn.addEventListener('click', async () => {
                 exportBtn.textContent = 'Exportando...';
                 exportBtn.disabled = true;
+
+                // Verificar que las librerías externas estén cargadas
+                if (typeof XLSX === 'undefined' || typeof utm === 'undefined') {
+                    alert('Las librerías para exportar no se han cargado. Revisa tu conexión a internet e inténtalo de nuevo.');
+                    exportBtn.textContent = 'Exportar a Excel';
+                    exportBtn.disabled = false;
+                    return;
+                }
 
                 try {
                     const points = await getPoints();
@@ -341,10 +347,12 @@
 
                     // 1. Preparar hoja "Componentes"
                     const componentesData = [
-                        ['Id Conexión', 'Puntos Guardados', 'Zona', 'Este', 'Norte', 'Latitud', 'Longitud']
+                        // Encabezado corregido para mayor claridad
+                        ['ID Punto', 'Puntos Guardados', 'Zona', 'Este', 'Norte', 'Latitud', 'Longitud']
                     ];
                     points.forEach(p => {
-                        const utmCoords = new utm(p.lat, p.lon);
+                        // Uso correcto de la librería UTM
+                        const utmCoords = utm.fromLatLon(p.lat, p.lon);
                         componentesData.push([
                             p.id,
                             p.name || `Punto #${p.id}`,
