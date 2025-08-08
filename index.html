@@ -34,7 +34,6 @@
         .leaflet-marker-icon.selected-destination {
             filter: hue-rotate(120deg) brightness(1.5); /* Verde brillante */
         }
-        /* Estilos para las etiquetas en el mapa */
         .map-label {
             background-color: rgba(0, 0, 0, 0.6);
             color: white;
@@ -45,11 +44,24 @@
             font-weight: bold;
             box-shadow: none;
         }
+        /* Animación de fuegos artificiales */
+        .firework {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #ffc700;
+            border-radius: 50%;
+            opacity: 0;
+            animation: burst 0.8s ease-out forwards;
+        }
+        @keyframes burst {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen">
 
-    <!-- Modal para pedir nombres -->
     <div id="name-modal" class="modal-overlay hidden">
         <div class="modal-content dark:bg-gray-800 shadow-xl rounded-lg">
             <h3 id="modal-title" class="text-lg font-bold mb-4"></h3>
@@ -64,9 +76,7 @@
     <main class="flex-grow flex flex-col p-4 space-y-4">
         
         <div id="top-section" class="text-center">
-            <!-- INDICADOR DE ESTADO DE CONEXIÓN -->
             <div id="status-indicator" class="text-xs p-2 rounded-lg font-bold inline-block"></div>
-            <!-- MENSAJE DE AYUDA PARA MODO OFFLINE -->
             <p id="offline-map-tip" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 <b>Tip:</b> Para usar el mapa sin conexión, navega por tu posible ruta de trabajo mientras tengas internet. La app guardará esa área.
             </p>
@@ -74,7 +84,6 @@
 
         <div id="map" class="bg-gray-300"></div>
 
-        <!-- SECCIÓN DE BOTONES MEJORADA -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
             <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
                 Agregar Ubicación
@@ -96,7 +105,6 @@
             </div>
         </div>
         
-        <!-- SECCIÓN DE LISTAS CON ID PARA EL SCROLL -->
         <div id="lists-section" class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pb-4">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col">
                 <h2 class="text-xl font-bold mb-2 text-center">Puntos Guardados</h2>
@@ -112,18 +120,25 @@
             </div>
         </div>
         
-        <!-- BOTÓN PARA SUBIR (NUEVA UBICACIÓN) -->
-        <div class="flex justify-end mt-2">
-            <a href="#top-section" id="scroll-up-btn" class="p-2 text-center bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95 inline-flex flex-col items-center">
-                <svg class="w-5 h-5 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-                <span class="text-white text-xs">Subir</span>
-            </a>
+        <div class="grid grid-cols-3 items-center mt-2">
+            <div id="fireworks-container" class="relative col-span-2 text-center p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <p id="motivational-message" class="text-sm font-semibold text-blue-800 dark:text-blue-200"></p>
+            </div>
+            <div class="flex justify-end">
+                <a href="#top-section" id="scroll-up-btn" class="p-2 text-center bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95 inline-flex flex-col items-center">
+                    <svg class="w-5 h-5 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                    <span class="text-white text-xs">Subir</span>
+                </a>
+            </div>
         </div>
     </main>
 
-    <!-- Leaflet JS -->
+    <footer class="text-center text-xs text-gray-500 dark:text-gray-400 p-4">
+        <p>®Copyright - Derechos Reservados</p>
+        <p>PVCACH - Ing. Keny Orlando M. C</p>
+    </footer>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- IndexedDB Helper -->
     <script src="indexedDB.js"></script>
 
     <script>
@@ -167,6 +182,8 @@
             const noConnectionsMsg = document.getElementById('no-connections-msg');
             const statusIndicator = document.getElementById('status-indicator');
             const offlineTip = document.getElementById('offline-map-tip');
+            const motivationalMessage = document.getElementById('motivational-message');
+            const fireworksContainer = document.getElementById('fireworks-container');
             
             const modal = document.getElementById('name-modal');
             const modalTitle = document.getElementById('modal-title');
@@ -255,7 +272,7 @@
             window.myApp.viewConnection = (id) => {
                 const polyline = leafletConnections[id];
                 if(polyline) {
-                    map.fitBounds(polyline.getBounds().pad(0.1)); // pad(0.1) da un poco de margen
+                    map.fitBounds(polyline.getBounds().pad(0.1));
                     polyline.openPopup();
                 }
             };
@@ -264,6 +281,7 @@
                 connectionsLayer.clearLayers();
                 leafletConnections = {};
                 connectionsList.innerHTML = '';
+                let totalDistance = 0;
                 const connections = await getConnections();
                 const points = await getPoints();
 
@@ -273,9 +291,15 @@
                 } else {
                     noConnectionsMsg.style.display = 'none';
                     connections.forEach(conn => {
-                        const latlngs = conn.pointIds.map(id => points.find(p => p.id === id)).filter(p => p).map(p => [p.lat, p.lon]);
+                        const latlngs = conn.pointIds.map(id => points.find(p => p.id === id)).filter(p => p).map(p => L.latLng(p.lat, p.lon));
                         
                         if (latlngs.length > 1) {
+                            let distance = 0;
+                            for(let i = 0; i < latlngs.length - 1; i++) {
+                                distance += map.distance(latlngs[i], latlngs[i+1]);
+                            }
+                            totalDistance += distance;
+
                             const polyline = L.polyline(latlngs, { color: 'orange' }).addTo(connectionsLayer);
                             leafletConnections[conn.id] = polyline;
 
@@ -283,17 +307,41 @@
                             polyline.bindPopup(popupContent);
                             
                             const center = polyline.getCenter();
-                            L.tooltip({ permanent: true, direction: 'center', className: 'map-label' }).setLatLng(center).setContent(conn.name).addTo(connectionsLayer);
+                            L.tooltip({ permanent: true, direction: 'center', className: 'map-label' }).setLatLng(center).setContent(`${conn.name} <em class="font-normal">(${distance.toFixed(0)} m)</em>`).addTo(connectionsLayer);
 
                             const li = document.createElement('li');
                             li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded flex justify-between items-center';
-                            li.innerHTML = `<span>${conn.name}</span> <button class="text-xs text-blue-500 font-semibold" onclick="viewConnectionOnMap(${conn.id})">Ver</button>`;
+                            li.innerHTML = `<span>${conn.name} <em class="text-gray-500 text-xs">(${distance.toFixed(0)} m)</em></span> <button class="text-xs text-blue-500 font-semibold" onclick="viewConnectionOnMap(${conn.id})">Ver</button>`;
                             connectionsList.appendChild(li);
                         }
                     });
                 }
+                updateMotivationalMessage(totalDistance);
             }
             
+            function updateMotivationalMessage(totalDistance) {
+                if (totalDistance > 0) {
+                    const totalKm = (totalDistance / 1000).toFixed(2);
+                    motivationalMessage.innerHTML = `¡Has recorrido <strong>${totalKm} km</strong>! Tu labor es vital para la vigilancia de la calidad del agua. Gracias a ti, un niño está feliz al consumir agua segura.`;
+                    triggerFireworks();
+                } else {
+                    motivationalMessage.innerHTML = 'Comienza a agregar puntos y conexiones para ver tu progreso.';
+                }
+            }
+
+            function triggerFireworks() {
+                for (let i = 0; i < 30; i++) {
+                    const firework = document.createElement('div');
+                    firework.className = 'firework';
+                    firework.style.left = `${Math.random() * 100}%`;
+                    firework.style.top = `${Math.random() * 100}%`;
+                    firework.style.transform = `scale(${Math.random() * 0.5 + 0.5})`;
+                    firework.style.animationDelay = `${Math.random() * 0.5}s`;
+                    fireworksContainer.appendChild(firework);
+                    setTimeout(() => firework.remove(), 800);
+                }
+            }
+
             document.addEventListener('click', async (e) => {
                 if (e.target.matches('.edit-btn')) {
                     const pointId = Number(e.target.dataset.id);
