@@ -8,40 +8,67 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
     <style>
-        #map { height: 60vh; width: 100%; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        body { touch-action: none; }
+        #map { height: 100vh; width: 100%; }
+        body { touch-action: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        
+        /* Efecto de rebote del marcador */
+        @keyframes drop {
+            0% { transform: translateY(-200px) scaleY(0.9); opacity: 0; }
+            5% { opacity: 0.7; }
+            50% { transform: translateY(0px) scaleY(1); }
+            65% { transform: translateY(-17px) scaleY(0.9); }
+            75% { transform: translateY(-7px) scaleY(0.95); }
+            100% { transform: translateY(0px) scaleY(1); opacity: 1; }
+        }
+        .marker-rebound {
+            animation: drop 0.6s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+            transform-origin: bottom center;
+        }
+        .leaflet-popup-content-wrapper { border-radius: 0.5rem; }
+        .leaflet-popup-content { font-size: 14px; line-height: 1.6; }
+        .leaflet-popup-content .action-button {
+            width: 100%;
+            padding: 8px;
+            margin-top: 8px;
+            border-radius: 5px;
+            border: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .leaflet-popup-content .save-button { background-color: #2563eb; }
+        .leaflet-popup-content .save-button:hover { background-color: #1d4ed8; }
+        .leaflet-popup-content .delete-button { background-color: #dc2626; }
+        .leaflet-popup-content .delete-button:hover { background-color: #b91c1c; }
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen">
+<body class="bg-gray-100 dark:bg-gray-900">
 
-    <main class="flex-grow flex flex-col p-4 space-y-4">
-        <div class="text-xs text-center text-gray-500 dark:text-gray-400 p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-            <b>Tip:</b> Para usar el mapa sin conexión, navega por tu zona de interés (y haz zoom) mientras tengas internet. La app guardará esa área.
-        </div>
-
-        <div id="map" class="bg-gray-300"></div>
-
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-center">
-            <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95">
-                Agregar Mi Ubicación Actual
+    <main class="relative h-screen">
+        <div id="controls-container" class="absolute top-4 left-4 z-[1000] flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2">
+            <button id="add-marker-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition-transform transform active:scale-95">
+                Agregar Mi Ubicación
+            </button>
+            <button id="create-connection-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition-transform transform active:scale-95">
+                Crear Conexión
             </button>
         </div>
 
-        <div class="flex-grow bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 overflow-y-auto">
-            <h2 class="text-xl font-bold mb-2 text-center">Puntos Guardados Offline</h2>
-            <ul id="points-list" class="space-y-2">
-                <li id="no-points-msg" class="text-gray-500 text-center">Aún no has guardado ningún punto.</li>
+        <div id="map"></div>
+
+        <div class="absolute bottom-0 left-0 right-0 z-[1000] bg-white dark:bg-gray-800 p-4 shadow-lg rounded-t-xl max-h-48 overflow-y-auto">
+            <h2 class="text-xl font-bold mb-2 text-center text-gray-900 dark:text-gray-100">Elementos Guardados</h2>
+            <ul id="points-list" class="space-y-2 text-gray-900 dark:text-gray-200">
+                <li id="no-points-msg" class="text-gray-500 text-center">No hay elementos guardados.</li>
             </ul>
         </div>
     </main>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- IndexedDB Helper -->
     <script src="indexedDB.js"></script>
 
     <script>
@@ -53,68 +80,24 @@
             await initDB();
 
             const map = L.map('map').setView([-13.5226, -71.9673], 13);
-
-            // --- CAMBIO A MAPA SATELITAL ---
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                attribution: 'Tiles &copy; Esri'
             }).addTo(map);
 
-            function addMarkerToMap(lat, lon, id) {
-                L.marker([lat, lon]).addTo(map)
-                    .bindPopup(`Punto guardado #${id}<br>Lat: ${lat.toFixed(4)}<br>Lon: ${lon.toFixed(4)}`);
-            }
+            let isConnecting = false;
+            let originPoint = null;
+            const markers = new Map();
 
-            const pointsList = document.getElementById('points-list');
-            const noPointsMsg = document.getElementById('no-points-msg');
-            
-            async function renderPoints() {
+            // --- RENDERIZADO PRINCIPAL ---
+            async function renderAll() {
+                // Limpiar mapa y lista
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                        map.removeLayer(layer);
+                    }
+                });
+                markers.clear();
+                const pointsList = document.getElementById('points-list');
+                const noPointsMsg = document.getElementById('no-points-msg');
                 pointsList.innerHTML = '';
-                const points = await getPoints();
-                const markersLayer = L.layerGroup().addTo(map); // Capa para limpiar marcadores
-                
-                if (points.length > 0) {
-                    if(noPointsMsg) noPointsMsg.style.display = 'none';
-                    points.forEach(point => {
-                        addMarkerToMap(point.lat, point.lon, point.id);
-                        const li = document.createElement('li');
-                        li.className = 'bg-gray-200 dark:bg-gray-700 p-2 rounded';
-                        li.textContent = `Punto #${point.id}: (Lat: ${point.lat.toFixed(4)}, Lon: ${point.lon.toFixed(4)})`;
-                        pointsList.appendChild(li);
-                    });
-                } else {
-                     if(noPointsMsg) {
-                        pointsList.appendChild(noPointsMsg);
-                        noPointsMsg.style.display = 'block';
-                     }
-                }
-            }
-
-            const addMarkerBtn = document.getElementById('add-marker-btn');
-            addMarkerBtn.addEventListener('click', () => {
-                addMarkerBtn.textContent = 'Obteniendo ubicación...';
-                addMarkerBtn.disabled = true;
-
-                navigator.geolocation.getCurrentPosition(
-                    async (position) => {
-                        const { latitude, longitude } = position.coords;
-                        await savePoint({ lat: latitude, lon: longitude });
-                        await renderPoints();
-                        map.setView([latitude, longitude], 18);
-                        addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
-                        addMarkerBtn.disabled = false;
-                    },
-                    (error) => {
-                        console.error('Error al obtener la ubicación', error);
-                        alert(`Error al obtener ubicación: ${error.message}`);
-                        addMarkerBtn.textContent = 'Agregar Mi Ubicación Actual';
-                        addMarkerBtn.disabled = false;
-                    },
-                    { enableHighAccuracy: true }
-                );
-            });
-
-            await renderPoints();
-        });
-    </script>
-</body>
-</html>
+                points
