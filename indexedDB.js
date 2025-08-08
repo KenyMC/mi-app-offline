@@ -40,40 +40,34 @@ async function initDB() {
 
 // --- FUNCIONES PARA PUNTOS ---
 
-// Guardar un nuevo punto
 async function savePoint(point) {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([PUNTOS_STORE_NAME], 'readwrite');
         const store = transaction.objectStore(PUNTOS_STORE_NAME);
         const request = store.add({ ...point, name: point.name || '', timestamp: new Date().getTime() });
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = (event) => reject('Error al guardar el punto: ' + event.target.errorCode);
     });
 }
 
-// Obtener todos los puntos
 async function getPoints() {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([PUNTOS_STORE_NAME], 'readonly');
         const store = transaction.objectStore(PUNTOS_STORE_NAME);
         const request = store.getAll();
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = (event) => reject('Error al obtener los puntos: ' + event.target.errorCode);
     });
 }
 
-// Actualizar un punto (para añadir/cambiar nombre)
 async function updatePoint(id, dataToUpdate) {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([PUNTOS_STORE_NAME], 'readwrite');
         const store = transaction.objectStore(PUNTOS_STORE_NAME);
         const getRequest = store.get(id);
-
         getRequest.onsuccess = () => {
             const point = getRequest.result;
             if (point) {
@@ -89,56 +83,70 @@ async function updatePoint(id, dataToUpdate) {
     });
 }
 
-// Eliminar un punto
 async function deletePoint(id) {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([PUNTOS_STORE_NAME], 'readwrite');
         const store = transaction.objectStore(PUNTOS_STORE_NAME);
         const request = store.delete(id);
-
         request.onsuccess = () => resolve();
         request.onerror = (event) => reject('Error al eliminar el punto: ' + event.target.errorCode);
     });
 }
 
-
 // --- FUNCIONES PARA CONEXIONES ---
 
-// Guardar una nueva conexión
 async function saveConnection(connection) {
      return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readwrite');
         const store = transaction.objectStore(CONEXIONES_STORE_NAME);
         const request = store.add({ ...connection, timestamp: new Date().getTime() });
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = (event) => reject('Error al guardar conexión: ' + event.target.errorCode);
     });
 }
 
-// Obtener todas las conexiones
 async function getConnections() {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readonly');
         const store = transaction.objectStore(CONEXIONES_STORE_NAME);
         const request = store.getAll();
-
         request.onsuccess = () => resolve(request.result);
         request.onerror = (event) => reject('Error al obtener conexiones: ' + event.target.errorCode);
     });
 }
 
-// Eliminar una conexión
+// *** NUEVA FUNCIÓN PARA ACTUALIZAR CONEXIONES ***
+async function updateConnection(id, dataToUpdate) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(CONEXIONES_STORE_NAME);
+        const getRequest = store.get(id);
+        getRequest.onsuccess = () => {
+            const conn = getRequest.result;
+            if (conn) {
+                const updatedConn = { ...conn, ...dataToUpdate };
+                const putRequest = store.put(updatedConn);
+                putRequest.onsuccess = () => resolve(putRequest.result);
+                putRequest.onerror = (event) => reject('Error al actualizar conexión: ' + event.target.errorCode);
+            } else {
+                reject('Conexión no encontrada');
+            }
+        };
+        getRequest.onerror = (event) => reject('Error al obtener para actualizar conexión: ' + event.target.errorCode);
+    });
+}
+
+
 async function deleteConnection(id) {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB no inicializada');
         const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readwrite');
         const store = transaction.objectStore(CONEXIONES_STORE_NAME);
         const request = store.delete(id);
-
         request.onsuccess = () => resolve();
         request.onerror = (event) => reject('Error al eliminar conexión: ' + event.target.errorCode);
     });
