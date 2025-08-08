@@ -1,8 +1,9 @@
-// --- SERVICE WORKER (v7 - Final con Mapa Satelital) ---
+// --- SERVICE WORKER (v8 - con Proj4JS y Caché de Librerías) ---
 
-const CACHE_NAME = 'mi-app-offline-v7-satelital';
+// Se incrementa la versión para forzar la actualización del Service Worker
+const CACHE_NAME = 'mi-app-offline-v8-proj4';
 
-// Archivos esenciales para el shell de la aplicación.
+// Archivos esenciales para el shell de la aplicación, incluyendo las nuevas librerías.
 const APP_SHELL_URLS = [
     './',
     './index.html',
@@ -10,29 +11,31 @@ const APP_SHELL_URLS = [
     './indexedDB.js',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-    'https://static.vecteezy.com/system/resources/previews/002/564/296/non_2x/location-pointer-water-drop-nature-liquid-blue-silhouette-style-icon-free-vector.jpg'
+    'https://static.vecteezy.com/system/resources/previews/002/564/296/non_2x/location-pointer-water-drop-nature-liquid-blue-silhouette-style-icon-free-vector.jpg',
+    // --- LIBRERÍAS AÑADIDAS AL CACHÉ PARA FUNCIONAR OFFLINE ---
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js',
+    // --- Imágenes de Leaflet que también deben estar en caché ---
+    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
 ];
 
-// Evento 'install': Guarda el App Shell.
+// Evento 'install': Guarda el App Shell y las librerías.
 self.addEventListener('install', event => {
-    console.log('Service Worker v7: Instalando...');
+    console.log(`Service Worker ${CACHE_NAME}: Instalando...`);
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Cache v7 abierto. Guardando App Shell...');
-                cache.addAll(APP_SHELL_URLS);
-                return cache.addAll([
-                    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-                    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
-                ]);
+                console.log(`Cache ${CACHE_NAME} abierto. Guardando App Shell...`);
+                return cache.addAll(APP_SHELL_URLS);
             })
-            .then(() => self.skipWaiting())
+            .then(() => self.skipWaiting()) // Activa el nuevo SW inmediatamente
     );
 });
 
 // Evento 'activate': Limpia cachés antiguos.
 self.addEventListener('activate', event => {
-    console.log('Service Worker v7: Activando...');
+    console.log(`Service Worker ${CACHE_NAME}: Activando...`);
     const cacheWhitelist = [CACHE_NAME];
     event.waitUntil(
         caches.keys().then(cacheNames => Promise.all(
@@ -46,14 +49,14 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Evento 'fetch': Lógica de caché robusta.
+// Evento 'fetch': Sirve contenido desde el caché o la red.
 self.addEventListener('fetch', event => {
     // Ignoramos peticiones que no sean GET
     if (event.request.method !== 'GET') {
         return;
     }
 
-    // Estrategia para las teselas del mapa satelital (Stale-While-Revalidate)
+    // Estrategia para las teselas del mapa (Stale-While-Revalidate)
     if (event.request.url.includes('server.arcgisonline.com')) {
         event.respondWith(
             caches.open(CACHE_NAME).then(cache => {
@@ -66,11 +69,10 @@ self.addEventListener('fetch', event => {
                 });
             })
         );
-        return; // Termina aquí para las teselas
+        return;
     }
 
-    // Estrategia para todo lo demás (App Shell): Cache First, con fallback a la red y a la página principal.
-    // ESTA ES LA SOLUCIÓN DEFINITIVA PARA EL REFRESH OFFLINE.
+    // Estrategia para todo lo demás (App Shell): Cache First, con fallback a la red.
     event.respondWith(
         caches.match(event.request)
             .then(cachedResponse => {
@@ -78,19 +80,13 @@ self.addEventListener('fetch', event => {
                 if (cachedResponse) {
                     return cachedResponse;
                 }
-                
-                // Si no está en caché, lo busca en la red.
-                return fetch(event.request)
-                    .catch(() => {
-                        // Si la red falla y es una petición de navegación (actualizar)...
-                        if (event.request.mode === 'navigate') {
-                            // ...devuelve la página principal desde el caché.
-                            console.log('Fallback de navegación: devolviendo index.html desde caché');
-                            return caches.match('./index.html');
-                        }
-                        // Si no, la petición falla.
-                        return null;
-                    });
+                // Si no, lo busca en la red.
+                return fetch(event.request).catch(() => {
+                    if (event.request.mode === 'navigate') {
+                        return caches.match('./index.html');
+                    }
+                    return null;
+                });
             })
     );
 });
