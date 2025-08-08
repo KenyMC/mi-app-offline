@@ -1,16 +1,17 @@
 // --- AYUDANTE PARA INDEXEDDB (v2) ---
-// Gestiona puntos y conexiones.
+// Simplifica la interacción con la base de datos del navegador.
+// AHORA INCLUYE SOPORTE PARA CONEXIONES Y EDICIÓN/ELIMINACIÓN DE PUNTOS.
 
 let db;
 const DB_NAME = 'GeoPuntosDB';
-const DB_VERSION = 2; // Incrementar la versión por cambios en la estructura
-const STORE_POINTS = 'puntos';
-const STORE_CONNECTIONS = 'conexiones';
+const PUNTOS_STORE_NAME = 'puntos';
+const CONEXIONES_STORE_NAME = 'conexiones';
 
 // Función para inicializar la base de datos
 async function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        // Incrementamos la versión a 2 para disparar onupgradeneeded
+        const request = indexedDB.open(DB_NAME, 2);
 
         request.onerror = (event) => {
             console.error('Error al abrir la base de datos', event);
@@ -19,15 +20,13 @@ async function initDB() {
 
         request.onupgradeneeded = (event) => {
             db = event.target.result;
-            // Crea almacén de puntos si no existe
-            if (!db.objectStoreNames.contains(STORE_POINTS)) {
-                db.createObjectStore(STORE_POINTS, { keyPath: 'id', autoIncrement: true });
+            // Crea el almacén de puntos si no existe
+            if (!db.objectStoreNames.contains(PUNTOS_STORE_NAME)) {
+                db.createObjectStore(PUNTOS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
             }
-            // Crea almacén de conexiones si no existe
-            if (!db.objectStoreNames.contains(STORE_CONNECTIONS)) {
-                const connectionStore = db.createObjectStore(STORE_CONNECTIONS, { keyPath: 'id', autoIncrement: true });
-                // Índice para buscar conexiones por punto de origen
-                connectionStore.createIndex('by_origin', 'originId', { unique: false });
+            // Crea el almacén de conexiones si no existe
+            if (!db.objectStoreNames.contains(CONEXIONES_STORE_NAME)) {
+                db.createObjectStore(CONEXIONES_STORE_NAME, { keyPath: 'id', autoIncrement: true });
             }
         };
 
@@ -41,106 +40,106 @@ async function initDB() {
 
 // --- FUNCIONES PARA PUNTOS ---
 
+// Guardar un nuevo punto
 async function savePoint(point) {
     return new Promise((resolve, reject) => {
-        if (!db) reject('La base de datos no está inicializada.');
-        const transaction = db.transaction([STORE_POINTS], 'readwrite');
-        const store = transaction.objectStore(STORE_POINTS);
-        const request = store.add({ ...point, timestamp: new Date().getTime() });
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([PUNTOS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(PUNTOS_STORE_NAME);
+        const request = store.add({ ...point, name: point.name || '', timestamp: new Date().getTime() });
 
-        request.onsuccess = (event) => {
-            // Devolvemos el objeto completo, incluyendo el ID asignado
-            const savedPoint = { ...point, id: event.target.result };
-            resolve(savedPoint);
-        };
-        request.onerror = (event) => reject('Error al guardar el punto: ' + event.target.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (event) => reject('Error al guardar el punto: ' + event.target.errorCode);
     });
 }
 
+// Obtener todos los puntos
 async function getPoints() {
     return new Promise((resolve, reject) => {
-        if (!db) reject('La base de datos no está inicializada.');
-        const transaction = db.transaction([STORE_POINTS], 'readonly');
-        const store = transaction.objectStore(STORE_POINTS);
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([PUNTOS_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(PUNTOS_STORE_NAME);
         const request = store.getAll();
 
         request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => reject('Error al obtener los puntos: ' + event.target.error);
+        request.onerror = (event) => reject('Error al obtener los puntos: ' + event.target.errorCode);
     });
 }
 
-async function savePointName(id, name) {
+// Actualizar un punto (para añadir/cambiar nombre)
+async function updatePoint(id, dataToUpdate) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_POINTS], 'readwrite');
-        const store = transaction.objectStore(STORE_POINTS);
-        const request = store.get(id);
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([PUNTOS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(PUNTOS_STORE_NAME);
+        const getRequest = store.get(id);
 
-        request.onsuccess = () => {
-            const point = request.result;
+        getRequest.onsuccess = () => {
+            const point = getRequest.result;
             if (point) {
-                point.name = name;
-                const updateRequest = store.put(point);
-                updateRequest.onsuccess = () => resolve(updateRequest.result);
-                updateRequest.onerror = (event) => reject('Error al actualizar el punto: ' + event.target.error);
+                const updatedPoint = { ...point, ...dataToUpdate };
+                const putRequest = store.put(updatedPoint);
+                putRequest.onsuccess = () => resolve(putRequest.result);
+                putRequest.onerror = (event) => reject('Error al actualizar: ' + event.target.errorCode);
             } else {
                 reject('Punto no encontrado');
             }
         };
-        request.onerror = (event) => reject('Error al buscar el punto: ' + event.target.error);
+        getRequest.onerror = (event) => reject('Error al obtener para actualizar: ' + event.target.errorCode);
     });
 }
 
+// Eliminar un punto
 async function deletePoint(id) {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_POINTS, STORE_CONNECTIONS], 'readwrite');
-        const pointsStore = transaction.objectStore(STORE_POINTS);
-        const connectionsStore = transaction.objectStore(STORE_CONNECTIONS);
-        
-        // 1. Eliminar el punto
-        const deletePointRequest = pointsStore.delete(id);
-        deletePointRequest.onerror = (event) => reject('Error al eliminar punto: ' + event.target.error);
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([PUNTOS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(PUNTOS_STORE_NAME);
+        const request = store.delete(id);
 
-        // 2. Eliminar conexiones asociadas
-        const index = connectionsStore.index('by_origin');
-        const cursorRequest = index.openCursor(IDBKeyRange.only(id));
-        cursorRequest.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                connectionsStore.delete(cursor.primaryKey);
-                cursor.continue();
-            }
-        };
-        // También eliminar si es destino (requiere más lógica o un segundo índice)
-        // Por simplicidad, este ejemplo solo borra si es origen.
-
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = (event) => reject('Error en la transacción de borrado: ' + event.target.error);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error al eliminar el punto: ' + event.target.errorCode);
     });
 }
 
 
 // --- FUNCIONES PARA CONEXIONES ---
 
+// Guardar una nueva conexión
 async function saveConnection(connection) {
-    return new Promise((resolve, reject) => {
-        if (!db) reject('La base de datos no está inicializada.');
-        const transaction = db.transaction([STORE_CONNECTIONS], 'readwrite');
-        const store = transaction.objectStore(STORE_CONNECTIONS);
-        const request = store.add(connection);
+     return new Promise((resolve, reject) => {
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(CONEXIONES_STORE_NAME);
+        const request = store.add({ ...connection, timestamp: new Date().getTime() });
 
         request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => reject('Error al guardar la conexión: ' + event.target.error);
+        request.onerror = (event) => reject('Error al guardar conexión: ' + event.target.errorCode);
     });
 }
 
+// Obtener todas las conexiones
 async function getConnections() {
     return new Promise((resolve, reject) => {
-        if (!db) reject('La base de datos no está inicializada.');
-        const transaction = db.transaction([STORE_CONNECTIONS], 'readonly');
-        const store = transaction.objectStore(STORE_CONNECTIONS);
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(CONEXIONES_STORE_NAME);
         const request = store.getAll();
 
         request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) => reject('Error al obtener las conexiones: ' + event.target.error);
+        request.onerror = (event) => reject('Error al obtener conexiones: ' + event.target.errorCode);
+    });
+}
+
+// Eliminar una conexión
+async function deleteConnection(id) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject('DB no inicializada');
+        const transaction = db.transaction([CONEXIONES_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(CONEXIONES_STORE_NAME);
+        const request = store.delete(id);
+
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error al eliminar conexión: ' + event.target.errorCode);
     });
 }
