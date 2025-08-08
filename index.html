@@ -68,7 +68,7 @@
             <div id="status-indicator" class="text-xs p-2 rounded-lg font-bold inline-block"></div>
             <!-- MENSAJE DE AYUDA PARA MODO OFFLINE -->
             <p id="offline-map-tip" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                <b>Tip:</b> Para usar el mapa sin conexión, navega por tu zona de trabajo mientras tengas internet. La app guardará esa área.
+                <b>Tip:</b> Para usar el mapa sin conexión, navega por tu posible ruta de trabajo mientras tengas internet. La app guardará esa área.
             </p>
         </div>
 
@@ -111,13 +111,15 @@
                 </ul>
             </div>
         </div>
+        
+        <!-- BOTÓN PARA SUBIR (NUEVA UBICACIÓN) -->
+        <div class="flex justify-end mt-2">
+            <a href="#top-section" id="scroll-up-btn" class="p-2 text-center bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95 inline-flex flex-col items-center">
+                <svg class="w-5 h-5 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                <span class="text-white text-xs">Subir</span>
+            </a>
+        </div>
     </main>
-    
-    <!-- BOTÓN PARA SUBIR -->
-    <a href="#top-section" id="scroll-up-btn" class="fixed bottom-5 right-5 p-2 text-center bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95 z-50">
-        <svg class="w-5 h-5 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-        <span class="text-white text-xs">Subir</span>
-    </a>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
