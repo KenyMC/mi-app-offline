@@ -63,7 +63,7 @@
 
     <main class="flex-grow flex flex-col p-4 space-y-4">
         
-        <div class="text-center">
+        <div id="top-section" class="text-center">
             <!-- INDICADOR DE ESTADO DE CONEXIÓN -->
             <div id="status-indicator" class="text-xs p-2 rounded-lg font-bold inline-block"></div>
             <!-- MENSAJE DE AYUDA PARA MODO OFFLINE -->
@@ -77,7 +77,7 @@
         <!-- SECCIÓN DE BOTONES MEJORADA -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
             <button id="add-marker-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
-                Agregar Pto.
+                Agregar Ubicación
             </button>
             <button id="connection-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
                 Crear Conexión
@@ -89,8 +89,9 @@
                 <button id="clear-map-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 text-sm">
                     Limpiar Mapa
                 </button>
-                <a href="#lists-section" id="scroll-down-btn" class="p-3 bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95">
-                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                <a href="#lists-section" id="scroll-down-btn" class="p-2 text-center bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95">
+                    <svg class="w-4 h-4 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <span class="text-white text-xs">Bajar</span>
                 </a>
             </div>
         </div>
@@ -111,6 +112,12 @@
             </div>
         </div>
     </main>
+    
+    <!-- BOTÓN PARA SUBIR -->
+    <a href="#top-section" id="scroll-up-btn" class="fixed bottom-5 right-5 p-2 text-center bg-gray-600 hover:bg-gray-700 rounded-lg transition-transform transform active:scale-95 z-50">
+        <svg class="w-5 h-5 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+        <span class="text-white text-xs">Subir</span>
+    </a>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -147,6 +154,7 @@
             const exportBtn = document.getElementById('export-btn');
             const clearMapBtn = document.getElementById('clear-map-btn');
             const scrollDownBtn = document.getElementById('scroll-down-btn');
+            const scrollUpBtn = document.getElementById('scroll-up-btn');
             const pointsList = document.getElementById('points-list');
             const connectionsList = document.getElementById('connections-list');
             const noPointsMsg = document.getElementById('no-points-msg');
@@ -302,12 +310,12 @@
                         if (newName) await updatePoint(pointId, { name: newName });
                         await renderAll();
                         map.setView([latitude, longitude], 18);
-                        addMarkerBtn.textContent = 'Agregar Pto.';
+                        addMarkerBtn.textContent = 'Agregar Ubicación';
                         addMarkerBtn.disabled = false;
                     },
                     (error) => {
                         alert(`Error al obtener ubicación: ${error.message}`);
-                        addMarkerBtn.textContent = 'Agregar Pto.';
+                        addMarkerBtn.textContent = 'Agregar Ubicación';
                         addMarkerBtn.disabled = false;
                     }, { enableHighAccuracy: true }
                 );
@@ -365,7 +373,6 @@
                 });
             }
             
-            // --- LÓGICA BOTÓN LIMPIAR MAPA ---
             clearMapBtn.addEventListener('click', async () => {
                 const confirmed = confirm('Esta acción eliminará todos los puntos y conexiones. ¿Estás seguro?');
                 if (confirmed) {
@@ -387,10 +394,14 @@
                 }
             });
 
-            // --- LÓGICA BOTÓN SCROLL ---
             scrollDownBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 document.getElementById('lists-section').scrollIntoView({ behavior: 'smooth' });
+            });
+            
+            scrollUpBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('top-section').scrollIntoView({ behavior: 'smooth' });
             });
 
             function getUtmLetterDesignator(latitude) {
