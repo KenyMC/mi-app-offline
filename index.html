@@ -58,6 +58,28 @@
             0% { transform: scale(0); opacity: 1; }
             100% { transform: scale(1); opacity: 0; }
         }
+        /* Animación de salpicadura de agua */
+        .splash-particle {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 6px;
+            height: 6px;
+            background: #3498db;
+            border-radius: 50%;
+            opacity: 1;
+            animation: splash 0.7s ease-out forwards;
+        }
+        @keyframes splash {
+            0% {
+                transform: translate(-50%, -50%) scale(0);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--x), var(--y)) scale(1);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen">
@@ -121,7 +143,7 @@
         </div>
         
         <div class="grid grid-cols-3 items-center mt-2">
-            <div id="fireworks-container" class="relative col-span-2 text-center p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+            <div id="animation-container" class="relative col-span-2 text-center p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                 <p id="motivational-message" class="text-sm font-semibold text-blue-800 dark:text-blue-200"></p>
             </div>
             <div class="flex justify-end">
@@ -170,7 +192,7 @@
             let connectionState = 'idle';
             let connectionPoints = [];
             let lastMilestone = 0;
-            let fireworksInterval = null;
+            let animationInterval = null;
 
             const addMarkerBtn = document.getElementById('add-marker-btn');
             const connectionBtn = document.getElementById('connection-btn');
@@ -185,7 +207,7 @@
             const statusIndicator = document.getElementById('status-indicator');
             const offlineTip = document.getElementById('offline-map-tip');
             const motivationalMessage = document.getElementById('motivational-message');
-            const fireworksContainer = document.getElementById('fireworks-container');
+            const animationContainer = document.getElementById('animation-container');
             
             const modal = document.getElementById('name-modal');
             const modalTitle = document.getElementById('modal-title');
@@ -266,6 +288,7 @@
             window.myApp.viewPoint = (id) => {
                 const marker = leafletMarkers[id];
                 if (marker) {
+                    document.getElementById('top-section').scrollIntoView({ behavior: 'smooth' });
                     map.setView(marker.getLatLng(), 18);
                     marker.openPopup();
                 }
@@ -274,6 +297,7 @@
             window.myApp.viewConnection = (id) => {
                 const polyline = leafletConnections[id];
                 if(polyline) {
+                    document.getElementById('top-section').scrollIntoView({ behavior: 'smooth' });
                     map.fitBounds(polyline.getBounds().pad(0.1));
                     polyline.openPopup();
                 }
@@ -339,8 +363,9 @@
                 const totalKm = totalDistance / 1000;
                 let message = `¡Has recorrido <strong>${totalKm.toFixed(2)} km</strong>! Tu labor es vital para la vigilancia de la calidad del agua.`;
                 let achievedMilestone = 0;
+                if (animationInterval) clearInterval(animationInterval);
+                animationInterval = null;
 
-                // Encontrar el hito más alto alcanzado
                 for (const km in milestoneMessages) {
                     if (totalKm >= km) {
                         achievedMilestone = Math.max(achievedMilestone, km);
@@ -351,17 +376,23 @@
                     message = milestoneMessages[achievedMilestone];
                     if (achievedMilestone > lastMilestone) {
                         lastMilestone = achievedMilestone;
-                        if (fireworksInterval) clearInterval(fireworksInterval); // Limpiar intervalo anterior
-                        triggerFireworks(); // Celebración instantánea
-                        fireworksInterval = setInterval(triggerFireworks, 60000); // Celebración cada minuto
+                        triggerFireworks();
+                        animationInterval = setInterval(triggerFireworks, 60000);
                     }
                 } else {
-                    // Si la distancia baja del último hito, resetear
                     lastMilestone = 0;
-                    if (fireworksInterval) clearInterval(fireworksInterval);
-                    fireworksInterval = null;
-                    if (totalDistance === 0) {
-                        message = 'Comienza a agregar puntos y conexiones para ver tu progreso.';
+                    if (totalDistance > 0) {
+                        let splashTimeout;
+                        const startSplash = () => {
+                            triggerWaterSplash();
+                            splashTimeout = setTimeout(() => {
+                                if(animationInterval) clearInterval(animationInterval);
+                            }, 60000);
+                        };
+                        startSplash();
+                        animationInterval = setInterval(startSplash, 4000);
+                    } else {
+                         message = 'Comienza a agregar puntos y conexiones para ver tu progreso.';
                     }
                 }
                 
@@ -376,8 +407,23 @@
                     firework.style.top = `${Math.random() * 100}%`;
                     firework.style.transform = `scale(${Math.random() * 0.5 + 0.5})`;
                     firework.style.animationDelay = `${Math.random() * 0.5}s`;
-                    fireworksContainer.appendChild(firework);
+                    animationContainer.appendChild(firework);
                     setTimeout(() => firework.remove(), 800);
+                }
+            }
+
+            function triggerWaterSplash() {
+                for (let i = 0; i < 20; i++) {
+                    const particle = document.createElement('div');
+                    particle.className = 'splash-particle';
+                    const angle = Math.random() * 360;
+                    const distance = Math.random() * 80 + 20;
+                    const x = Math.cos(angle * Math.PI / 180) * distance;
+                    const y = Math.sin(angle * Math.PI / 180) * distance;
+                    particle.style.setProperty('--x', `${x}px`);
+                    particle.style.setProperty('--y', `${y}px`);
+                    animationContainer.appendChild(particle);
+                    setTimeout(() => particle.remove(), 700);
                 }
             }
 
