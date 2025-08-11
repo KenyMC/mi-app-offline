@@ -16,9 +16,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
 
     <style>
-        /* --- CAMBIO CLAVE PARA EVITAR ACTUALIZACIÓN POR DESLIZAMIENTO --- */
         html, body {
-            overscroll-behavior-y: contain; /* Evita el "pull-to-refresh" */
+            overscroll-behavior-y: contain;
         }
         #map { height: 50vh; width: 100%; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         body { touch-action: none; }
@@ -33,10 +32,10 @@
             width: 90%; max-width: 400px;
         }
         .leaflet-marker-icon.selected-origin {
-            filter: hue-rotate(240deg) brightness(1.5); /* Azul brillante */
+            filter: hue-rotate(240deg) brightness(1.5);
         }
         .leaflet-marker-icon.selected-destination {
-            filter: hue-rotate(120deg) brightness(1.5); /* Verde brillante */
+            filter: hue-rotate(120deg) brightness(1.5);
         }
         .map-label {
             background-color: rgba(0, 0, 0, 0.6);
@@ -48,7 +47,6 @@
             font-weight: bold;
             box-shadow: none;
         }
-        /* Animación de fuegos artificiales */
         .firework {
             position: absolute;
             width: 4px;
@@ -62,7 +60,6 @@
             0% { transform: scale(0); opacity: 1; }
             100% { transform: scale(1); opacity: 0; }
         }
-        /* Animación de salpicadura de agua */
         .splash-particle {
             position: absolute;
             left: 50%;
@@ -168,6 +165,19 @@
     <script src="indexedDB.js"></script>
 
     <script>
+        // --- REGISTRO DEL SERVICE WORKER (MÉTODO MÁS ROBUSTO) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker [v12] registrado con éxito:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Fallo en el registro del Service Worker [v12]:', error);
+                    });
+            });
+        }
+
         function viewPointOnMap(id) {
             window.myApp.viewPoint(id);
         }
@@ -177,10 +187,6 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             window.myApp = {}; 
-
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').then(reg => console.log('Service Worker registrado', reg)).catch(err => console.error('Error al registrar SW', err));
-            }
 
             await initDB();
             const map = L.map('map').setView([-13.5226, -71.9673], 13);
